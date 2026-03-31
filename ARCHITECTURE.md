@@ -75,15 +75,105 @@ Following the Coinbase x402 facilitator pattern from `@x402/core`:
 
 The core `/submit` route reuses the scheme's underlying `verify()` + `settle()` logic but with a simpler non-x402 request format. Unlike the x402 scheme (which is specifically designed for the [vela-nova private transfer app](https://github.com/HorizenOfficial/vela-nova), `applicationId = 1`), `/submit` is **application-agnostic** and can forward requests to any app on the chain.
 
-## x402 Client-Side Integration
+## x402 Scheme Pattern
 
-The `@horizen/x402-private-vela-fixed` package also provides client-side support, following the same symmetric pattern as Coinbase's x402:
+The [x402 protocol](https://github.com/coinbase/x402/) by Coinbase defines three components that participate in the payment flow. Each component is generic and delegates all payment-specific logic to a pluggable **scheme**:
 
 ```
 @x402/core
-├── x402Facilitator + scheme  →  server: verify/settle
-└── x402Client      + scheme  →  client: sign/pay (intercepts 402, signs, retries)
+├── x402Facilitator      + scheme  →  facilitator: verify/settle on-chain
+├── x402ResourceServer   + scheme  →  seller: returns 402, calls facilitator
+└── x402Client           + scheme  →  buyer: signs payments, retries after 402
 ```
+
+Coinbase ships the `exact` EVM scheme (direct ERC-20 transfers via EIP-3009). Our package `@horizen/x402-private-vela-fixed` provides a custom scheme for all three components, handling the vela-nova specific flow (EIP-2612 permit, encrypted payloads, `submitRequestFor()`). Each component only needs to register the scheme — the `@x402/core` framework handles the HTTP orchestration (402 responses, payment headers, retry logic).
+
+## x402 Facilitator Integration
+
+The facilitator implements `SchemeNetworkFacilitator` from `@x402/core`:
+
+```typescript
+interface SchemeNetworkFacilitator {
+  readonly scheme: string;                    // "private-vela-fixed"
+  readonly caipFamily: string;                // "eip155:*"
+
+  getExtra(network: Network): Record<string, unknown> | undefined;
+  getSigners(network: string): string[];
+
+  verify(payload: PaymentPayload, requirements: PaymentRequirements,
+         context?: FacilitatorContext): Promise<VerifyResponse>;
+  settle(payload: PaymentPayload, requirements: PaymentRequirements,
+         context?: FacilitatorContext): Promise<SettleResponse>;
+}
+```
+
+Setup:
+
+```typescript
+import { x402Facilitator } from '@x402/core/facilitator';
+import { registerPrivateVelaFixedScheme } from '@horizen/x402-private-vela-fixed';
+
+const facilitator = new x402Facilitator();
+registerPrivateVelaFixedScheme(facilitator, {
+  rpcUrl: config.rpcUrl,                        // from RPC_URL
+  contractAddress: config.contractAddress,        // from PROCESSOR_ENDPOINT_ADDRESS
+  signer: new ethers.Wallet(config.signerPrivateKey), // ethers.Signer from FACILITATOR_PRIVATE_KEY
+  maxFeeValue: config.maxFeeValue,                // from MAX_FEE_VALUE
+  applicationId: config.applicationId,            // from VELA_NOVA_APPLICATION_ID
+  network: `eip155:${config.chainId}`,            // derived from CHAIN_ID
+});
+
+// x402 routes delegate to facilitator.verify() / facilitator.settle()
+// Core /submit route reuses scheme logic with simpler request format
+// No /nonce endpoint — clients read facilitatorNonces[user] directly from contract
+```
+
+## x402 Resource Server Integration (Seller)
+
+The seller uses `x402ResourceServer` from `@x402/core/server` to protect routes behind x402 payments. Our scheme provides `registerPrivateVelaFixedServer()` to configure the `PaymentRequirements` with the correct scheme-specific fields (including `extra.invoiceId`).
+
+```typescript
+import { x402ResourceServer, HTTPFacilitatorClient } from '@x402/core/server';
+import { x402HTTPResourceServer } from '@x402/core/http';
+import { registerPrivateVelaFixedServer } from '@horizen/x402-private-vela-fixed';
+
+const facilitatorClient = new HTTPFacilitatorClient({
+  url: 'https://facilitator.vela.network',
+});
+
+const resourceServer = new x402ResourceServer(facilitatorClient);
+registerPrivateVelaFixedServer(resourceServer, {
+  network: 'eip155:2651420',
+  payTo: sellerAddress,                   // seller's Ethereum address
+  tokenAddress: usdcAddress,              // ERC-20 token for deposits
+  contractAddress: processorEndpointAddr, // ProcessorEndpoint address
+});
+
+const routes = {
+  'GET /api/premium-data': {
+    accepts: {
+      scheme: 'private-vela-fixed',
+      network: 'eip155:2651420',
+      payTo: sellerAddress,
+      maxAmountRequired: '1000000',       // in token units
+      asset: usdcAddress,
+      extra: { invoiceId: 'INV-001' },    // seller sets per-route/per-request
+    },
+  },
+};
+
+const httpServer = new x402HTTPResourceServer(resourceServer, routes);
+```
+
+The resource server automatically:
+1. Returns 402 with `PaymentRequirements` when a protected route is accessed
+2. Extracts the payment proof from the retry header
+3. Calls the facilitator's `/verify` + `/settle`
+4. Returns the resource on successful settlement
+
+The seller is responsible for checking the `invoice_id` in the TEE event after processing — the facilitator cannot verify it (see "Settle Semantics" above).
+
+## x402 Client Integration (Buyer)
 
 The client-side scheme handles all vela-nova specific logic:
 1. Receives 402 response with `PaymentRequirements` (including `extra.invoiceId`)
@@ -123,8 +213,9 @@ vela-facilitator/
 │   │   │   ├── index.ts               # Public exports
 │   │   │   ├── scheme.ts              # PrivateVelaFixedScheme (facilitator: verify/settle)
 │   │   │   ├── register.ts            # registerPrivateVelaFixedScheme() (facilitator)
-│   │   │   ├── client.ts              # registerPrivateVelaFixedClient() (client: sign/pay)
+│   │   │   ├── client.ts              # registerPrivateVelaFixedClient() (buyer: sign/pay)
 │   │   │   ├── sign.ts                # Client signing logic (EIP-712 + EIP-2612 + P-521 encrypt)
+│   │   │   ├── server.ts              # registerPrivateVelaFixedServer() (seller: 402 + PaymentRequirements)
 │   │   │   ├── types.ts               # RequestAuthorization, DepositPermit, VelaPaymentPayload
 │   │   │   ├── verify.ts              # Off-chain EIP-712 + EIP-2612 signature validation
 │   │   │   └── settle.ts              # On-chain submitRequestFor() call
@@ -205,44 +296,6 @@ The token address is **not** a configuration parameter — it comes from the cli
 | Testing | Vitest | Fast, TypeScript-native |
 | Ethereum library | ethers.js v6 | Matches vela-common-ts |
 | Package manager | pnpm workspaces | Standard for monorepos, good for local package linking |
-
-## Key Interface: SchemeNetworkFacilitator (from @x402/core)
-
-```typescript
-interface SchemeNetworkFacilitator {
-  readonly scheme: string;                    // "private-vela-fixed"
-  readonly caipFamily: string;                // "eip155:*"
-
-  getExtra(network: Network): Record<string, unknown> | undefined;
-  getSigners(network: string): string[];
-
-  verify(payload: PaymentPayload, requirements: PaymentRequirements,
-         context?: FacilitatorContext): Promise<VerifyResponse>;
-  settle(payload: PaymentPayload, requirements: PaymentRequirements,
-         context?: FacilitatorContext): Promise<SettleResponse>;
-}
-```
-
-## Facilitator Server Setup (conceptual)
-
-```typescript
-import { x402Facilitator } from '@x402/core/facilitator';
-import { registerPrivateVelaFixedScheme } from '@horizen/x402-private-vela-fixed';
-
-const facilitator = new x402Facilitator();
-registerPrivateVelaFixedScheme(facilitator, {
-  rpcUrl: config.rpcUrl,                        // from RPC_URL
-  contractAddress: config.contractAddress,        // from PROCESSOR_ENDPOINT_ADDRESS
-  signer: new ethers.Wallet(config.signerPrivateKey), // ethers.Signer from FACILITATOR_PRIVATE_KEY
-  maxFeeValue: config.maxFeeValue,                // from MAX_FEE_VALUE
-  applicationId: config.applicationId,            // from VELA_NOVA_APPLICATION_ID
-  network: `eip155:${config.chainId}`,            // derived from CHAIN_ID
-});
-
-// x402 routes delegate to facilitator.verify() / facilitator.settle()
-// Core /submit route reuses scheme logic with simpler request format
-// No /nonce endpoint — clients read facilitatorNonces[user] directly from contract
-```
 
 ## Mock Infrastructure
 

@@ -10,13 +10,13 @@ Gasless request submission service for the Vela blockchain platform. Allows user
 
 ## Status
 
-Planning phase complete. No code implemented yet. See `PLAN.md` for the full 18-task implementation plan (Tasks 0–17).
+Planning phase complete. No code implemented yet. See `PLAN.md` for the full 19-task implementation plan (Tasks 0–18).
 
 ## Architecture
 
 pnpm workspace monorepo with two internal packages:
 
-- **`packages/x402-private-vela-fixed/`** — `@horizen/x402-private-vela-fixed` npm package. Implements `SchemeNetworkFacilitator` from `@x402/core` (Coinbase x402 protocol). Contains all Vela-specific payment logic (EIP-712 request authorization, EIP-2612 deposit permit, on-chain `submitRequestFor()` settlement). Designed to be publishable and pluggable into any x402 facilitator.
+- **`packages/x402-private-vela-fixed/`** — `@horizen/x402-private-vela-fixed` npm package. Provides the `private-vela-fixed` scheme for all three x402 components: **facilitator** (verify/settle via `submitRequestFor()`), **resource server** (seller-side, 402 + PaymentRequirements with `invoiceId`), **client** (buyer-side, EIP-712 + EIP-2612 signing, P-521 payload encryption). Uses EIP-2612 (`permit`) for deposit authorization. Designed to be publishable and pluggable into any x402 facilitator/client/server.
 - **`packages/contracts/`** — Hardhat project with mock Solidity contracts (`MockProcessorEndpoint`, `MockEIP2612Token`, etc.) used for local development and integration testing against Anvil.
 
 The root package (`src/`) is the facilitator Express.js HTTP server:
@@ -24,7 +24,7 @@ The root package (`src/`) is the facilitator Express.js HTTP server:
 - x402 routes: `GET /supported`, `POST /verify`, `POST /settle` — specifically designed for the [vela-nova private transfer app](https://github.com/HorizenOfficial/vela-nova) (`applicationId = 1`)
 - Core route: `POST /submit` — application-agnostic, can forward requests to any app on the chain. Nonce queries are done directly on-chain by clients.
 
-Mock infrastructure (`mock/`) manages Anvil lifecycle, contract deployment, and TEE processing simulation.
+Mock infrastructure (`mock/`) manages Anvil lifecycle and contract deployment.
 
 ## Tech Stack
 
@@ -53,4 +53,8 @@ See `CLAUDE.local.md` (if any) for local path mappings. Key references:
 - Mock contracts are **standalone** (not extending the real ProcessorEndpoint) because the ERC-20 prerequisite changes are not yet merged upstream.
 - The `@horizen/x402-private-vela-fixed` scheme follows the x402 pattern but uses EIP-2612 (`permit`) for deposit authorization instead of EIP-3009 (`transferWithAuthorization`) used by Coinbase's standard `exact` scheme. This means the Coinbase reference facilitator's settle logic can't be reused directly — our scheme implements its own verify/settle via `submitRequestFor()`.
 - Only `ASSOCIATEKEY` and `PROCESS` request types are supported via `submitRequestFor`. Other request types are rejected.
-- The x402 scheme targets [vela-nova](https://github.com/HorizenOfficial/vela-nova) private transfers. Both buyer and seller must have registered P-521 keys (`ASSOCIATEKEY`) before transfers. The seller identifies payments via `invoiceId` (required in `PaymentRequirements.extra`, must be included in the vela-nova transfer payload as `invoice_id`; verified during x402 verify). See [private transfer app docs](https://github.com/HorizenOfficial/vela-starterkit/blob/main/docs/2_private-transfer-app.md) for details.
+- The x402 scheme targets [vela-nova](https://github.com/HorizenOfficial/vela-nova) private transfers. `applicationId` is configurable (env var `VELA_NOVA_APPLICATION_ID`), `requestType = PROCESS` is hardcoded. Both buyer and seller must have registered P-521 keys (`ASSOCIATEKEY`) before transfers — this is a vela-nova app-level prerequisite, not enforced by the facilitator.
+- The seller tracks payments via `invoiceId` in `PaymentRequirements.extra`. The facilitator **cannot** verify invoiceId (payload is encrypted) — the seller checks the match via TEE events after processing.
+- Settle is **asynchronous**: a successful `/settle` means on-chain submission, not TEE completion. The seller waits for the vela-nova encrypted event to confirm the transfer.
+- Config accepts `ethers.Signer` (not raw private keys) for Ethereum operations, following Coinbase's pattern. P-521 keys remain raw (ECIES encryption, not Ethereum).
+- See [private transfer app docs](https://github.com/HorizenOfficial/vela-starterkit/blob/main/docs/2_private-transfer-app.md) for vela-nova details.

@@ -150,7 +150,7 @@
   - Sign EIP-712 request authorization (includes sender, payloadHash, nonce, deadline, etc.)
   - Sign EIP-2612 permit (owner, spender, value, nonce, deadline)
   - Return `PaymentPayload` ready for x402Client
-**Acceptance**: Can produce valid signed payloads (tested in Task 16 E2E).
+**Acceptance**: Can produce valid signed payloads (tested in Task 17 E2E).
 
 ---
 
@@ -168,7 +168,21 @@
 
 ---
 
-## Task 11: Facilitator Server + x402 Routes
+## Task 11: Resource Server Registration Helper (`@horizen/x402-private-vela-fixed`)
+**Scope**: Seller-side scheme registration for `x402ResourceServer`. Configures how the resource server constructs `PaymentRequirements` with our scheme-specific `extra` fields.
+**Dependencies**: Task 5
+**Files**:
+- `/packages/x402-private-vela-fixed/src/server.ts`:
+  - `VelaServerConfig` — config for resource server (facilitatorUrl, network, payTo, tokenAddress, contractAddress)
+  - `registerPrivateVelaFixedServer(resourceServer: x402ResourceServer, config: VelaServerConfig): x402ResourceServer`
+  - Registers the `private-vela-fixed` scheme on the x402ResourceServer
+  - Constructs `PaymentRequirements` with: `scheme = "private-vela-fixed"`, `network`, `asset = tokenAddress`, `payTo`, `extra = { invoiceId }` (invoiceId is set per-route by the seller)
+- `/packages/x402-private-vela-fixed/src/index.ts` — add server exports
+**Acceptance**: Resource server scheme can be registered. Protected routes return 402 with correct PaymentRequirements including `extra.invoiceId`.
+
+---
+
+## Task 12: Facilitator Service + x402 Routes
 **Scope**: Express.js HTTP server that creates an `x402Facilitator` from `@x402/core` and registers our scheme. Exposes standard x402 endpoints.
 **Dependencies**: Task 8
 **Files**:
@@ -193,20 +207,20 @@
 
 ---
 
-## Task 12: Core Facilitation Routes
+## Task 13: Core Facilitation Routes
 **Scope**: Non-x402 endpoint for direct facilitator usage (mobile SDK, CLI, bots). Unlike the x402 scheme (which targets vela-nova specifically), `/submit` is **application-agnostic** — it forwards any `ASSOCIATEKEY` or `PROCESS` request to any application on the chain. Note: nonce queries are NOT part of the facilitator API — clients read `facilitatorNonces[user]` directly from the `ProcessorEndpoint` contract (public mapping with auto-generated getter).
-**Dependencies**: Task 11
+**Dependencies**: Task 12
 **Files**:
 - `/src/routes/submit.ts` — `POST /submit`:
   - Accepts: `{ sender, protocolVersion, applicationId, requestType, payload, tokenAddress, assetAmount, deadline, requestSignature, depositPermit }` (no nonce param — contract reads it from chain)
   - Only allows `ASSOCIATEKEY` and `PROCESS` request types
   - Wraps into x402 PaymentPayload format internally, delegates to scheme's settle logic
   - Returns: `{ requestId, txHash }`
-**Acceptance**: Endpoint responds correctly (tested in Task 14).
+**Acceptance**: Endpoint responds correctly (tested in Task 15).
 
 ---
 
-## Task 13: Test Setup + Helpers
+## Task 14: Test Setup + Helpers
 **Scope**: Shared test infrastructure: Anvil lifecycle, contract deployment, user signing helpers.
 **Dependencies**: Task 4, Task 5
 **Files**:
@@ -224,9 +238,9 @@
 
 ---
 
-## Task 14: Core Integration Tests
+## Task 15: Core Integration Tests
 **Scope**: Tests for POST /submit.
-**Dependencies**: Task 12, Task 13
+**Dependencies**: Task 13, Task 14
 **Files**:
 - `/test/core/submit.test.ts`:
   - Submit with `assetAmount > 0` (ERC-20 deposit via EIP-2612 permit) → PendingRequest created with correct sender (user) and facilitator
@@ -241,9 +255,9 @@
 
 ---
 
-## Task 15: x402 Integration Tests
+## Task 16: x402 Integration Tests
 **Scope**: Tests for POST /verify, POST /settle, GET /supported.
-**Dependencies**: Task 11, Task 13
+**Dependencies**: Task 12, Task 14
 **Files**:
 - `/test/x402/verify.test.ts`:
   - Valid payload → `{ isValid: true }`
@@ -258,9 +272,9 @@
 
 ---
 
-## Task 16: End-to-End Flow Test
-**Scope**: Full lifecycle test covering the complete facilitator flow, including vela-nova specific flows with invoiceId. The x402 flow uses a real `x402Client` with our scheme registered, testing the full client→facilitator round-trip.
-**Dependencies**: Task 10, Task 14, Task 15
+## Task 17: End-to-End Flow Test
+**Scope**: Full lifecycle test covering the complete facilitator flow, including vela-nova specific flows with invoiceId. The x402 flow uses a real `x402Client` + `x402ResourceServer` with our scheme registered, testing the full client→resource server→facilitator round-trip.
+**Dependencies**: Task 10, Task 11, Task 15, Task 16
 **Files**:
 - `/test/e2e/full-flow.test.ts`:
 
@@ -271,12 +285,17 @@
   4. Submit a PROCESS request via `POST /submit` with `assetAmount > 0`: EIP-712 request signature + EIP-2612 permit signature, encrypted payload. Verifies the facilitator correctly handles the two-signature flow with ERC-20 deposit.
   5. Verify on-chain: PendingRequest has correct sender, facilitator, tokenAddress, assetAmount.
 
-  **x402 flow (using real x402Client + our scheme):**
-  6. Create `x402Client` from `@x402/core`, register our scheme via `registerPrivateVelaFixedClient(client, config)`.
-  7. Set up a mock resource server that returns 402 with `PaymentRequirements` including `extra: { invoiceId: "INV-001" }`.
-  8. Call `client.fetch(mockResourceUrl)` — the x402Client automatically handles the 402: calls our sign logic (builds transfer payload with `invoice_id: "INV-001"`, encrypts, signs EIP-712 + EIP-2612), then retries with payment proof. The facilitator verifies and settles on-chain.
+  **x402 flow (full round-trip: client → resource server → facilitator → chain):**
+  6. Create `x402ResourceServer` from `@x402/core/server`, register our scheme via `registerPrivateVelaFixedServer(resourceServer, config)`. Configure a protected route with `invoiceId: "INV-001"`.
+  7. Create `x402Client` from `@x402/core/client`, register our scheme via `registerPrivateVelaFixedClient(client, config)`.
+  8. Call `client.fetch(protectedRouteUrl)` — the full x402 flow executes automatically:
+     - Resource server returns 402 with `PaymentRequirements` including `extra: { invoiceId: "INV-001" }`
+     - x402Client calls our sign logic: builds transfer payload with `invoice_id: "INV-001"`, encrypts with TEE P-521 key, signs EIP-712 + EIP-2612
+     - x402Client retries with payment proof in header
+     - Resource server calls facilitator `/verify` + `/settle`
+     - Facilitator submits `submitRequestFor()` on-chain
   9. Verify on-chain: PendingRequest has sender = buyer, facilitator = facilitator address.
-  10. This tests the full round-trip: x402Client (sign) → resource server (402) → facilitator (verify/settle) → chain.
+  10. This tests the full round-trip with all three x402 components using our scheme.
 
 **Acceptance**: All tests pass, demonstrating the complete facilitator lifecycle including payload encryption and async settle semantics.
 
@@ -286,9 +305,9 @@ Note: in a real deployment, both buyer and seller must have previously registere
 
 ---
 
-## Task 17: Documentation (README files)
+## Task 18: Documentation (README files)
 **Scope**: Three README.md files documenting the project.
-**Dependencies**: Task 12 (routes finalized), Task 10 (client finalized)
+**Dependencies**: Task 13 (routes finalized), Task 10 (client finalized), Task 11 (server finalized)
 **Files**:
 - `/README.md` — Project overview:
   - What vela-facilitator is and the problem it solves (gasless submission)
@@ -308,10 +327,11 @@ Note: in a real deployment, both buyer and seller must have previously registere
   - Example full flow walkthrough (read nonce from contract → sign → submit → verify result)
   - Error responses and status codes
 - `/packages/x402-private-vela-fixed/README.md` — Scheme package docs:
-  - What the package provides (both facilitator and client side)
-  - How to register the scheme in an x402Facilitator (server-side, with code example)
-  - How to register the scheme in an x402Client (client-side, with code example)
-  - VelaClientConfig options (signer: ethers.Signer, p521PrivateKey, teePublicKey, rpcUrl, contractAddress, tokenAddress)
+  - What the package provides (all three x402 sides: facilitator, client, resource server)
+  - Facilitator usage: `registerPrivateVelaFixedScheme()` with code example
+  - Client usage: `registerPrivateVelaFixedClient()` with code example
+  - Resource server usage: `registerPrivateVelaFixedServer()` with code example (route configuration, invoiceId per route)
+  - Config types: VelaSchemeConfig, VelaClientConfig, VelaServerConfig
   - Note on EIP-2612 vs EIP-3009 compatibility with Coinbase reference facilitator
   - Exported types and interfaces
   - EIP-712 domain and type definitions
