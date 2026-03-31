@@ -78,7 +78,7 @@
   - `DepositPermit` — EIP-2612 fields (owner, spender, value, nonce, deadline) + signature components (v, r, s)
   - `VelaPaymentPayload` — scheme-specific payload (sender, requestSignature, depositPermit, requestAuthorization, payload)
   - `VelaPaymentRequirementsExtra` — scheme-specific extra fields in `PaymentRequirements`: `{ invoiceId }`. The `invoiceId` (max 100 chars) lets the seller track and correlate the payment; the client is expected to include it in the vela-nova transfer payload as `invoice_id`. The facilitator cannot verify the match (payload is encrypted) — the seller checks it via TEE events. Note: `applicationId` (always `1`, vela-nova) and `requestType` (always `PROCESS`) are constants of the scheme, not parameters.
-  - `VelaSchemeConfig` — config for scheme (rpcUrl, contractAddress, signerPrivateKey, maxFeeValue, applicationId)
+  - `VelaSchemeConfig` — config for scheme (rpcUrl, contractAddress, signer: ethers.Signer, maxFeeValue, applicationId)
   - Scheme constants: `REQUEST_TYPE_PROCESS = 1` — hardcoded in the scheme. `applicationId` comes from `VelaSchemeConfig` (env var `VELA_NOVA_APPLICATION_ID`).
   - vela-nova payload types: `TransferInstruction { to, amount, invoice_id }`, `PayloadInstructions { type: "transfer", transfer }` — these represent the JSON payload that gets encrypted before submission
   - EIP-712 domain constants (name: "Vela", version, chainId, verifyingContract) + REQUEST_AUTHORIZATION_TYPEHASH
@@ -159,7 +159,7 @@
 **Dependencies**: Task 9
 **Files**:
 - `/packages/x402-private-vela-fixed/src/client.ts`:
-  - `VelaClientConfig` — config for client (signerPrivateKey, p521PrivateKey, teePublicKey, rpcUrl, contractAddress, tokenAddress)
+  - `VelaClientConfig` — config for client (signer: ethers.Signer, p521PrivateKey, teePublicKey, rpcUrl, contractAddress, tokenAddress)
   - `registerPrivateVelaFixedClient(client: x402Client, config: VelaClientConfig): x402Client`
   - Registers the `private-vela-fixed` scheme on the x402Client
   - When the client encounters a 402 with this scheme, delegates to sign.ts to build the payment
@@ -174,7 +174,7 @@
 **Files**:
 - `/src/config.ts` — Configuration from environment variables:
   - `RPC_URL` — Vela chain RPC endpoint
-  - `FACILITATOR_PRIVATE_KEY` — EOA private key (pays gas + maxFeeValue)
+  - `FACILITATOR_PRIVATE_KEY` — EOA private key (used to create an ethers.Signer; pays gas + maxFeeValue)
   - `PROCESSOR_ENDPOINT_ADDRESS` — ProcessorEndpoint contract address
   - `CHAIN_ID` — Chain ID (for EIP-712 domain and CAIP-2 network derivation)
   - `MAX_FEE_VALUE` — ETH in wei sent as `msg.value` for service fees
@@ -311,7 +311,7 @@ Note: in a real deployment, both buyer and seller must have previously registere
   - What the package provides (both facilitator and client side)
   - How to register the scheme in an x402Facilitator (server-side, with code example)
   - How to register the scheme in an x402Client (client-side, with code example)
-  - VelaClientConfig options (signerPrivateKey, p521PrivateKey, teePublicKey, rpcUrl, contractAddress, tokenAddress)
+  - VelaClientConfig options (signer: ethers.Signer, p521PrivateKey, teePublicKey, rpcUrl, contractAddress, tokenAddress)
   - Note on EIP-2612 vs EIP-3009 compatibility with Coinbase reference facilitator
   - Exported types and interfaces
   - EIP-712 domain and type definitions

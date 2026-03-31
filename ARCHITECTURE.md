@@ -100,8 +100,8 @@ import { registerPrivateVelaFixedClient } from '@horizen/x402-private-vela-fixed
 
 const client = new x402Client();
 registerPrivateVelaFixedClient(client, {
-  signerPrivateKey: buyerPrivateKey,       // buyer's EOA key (for EIP-712 + EIP-2612)
-  p521PrivateKey: buyerP521Key,            // buyer's P-521 key (for encryption)
+  signer: buyerSigner,                    // ethers.Signer (for EIP-712 + EIP-2612)
+  p521PrivateKey: buyerP521Key,            // buyer's P-521 key (for payload encryption, not Ethereum)
   teePublicKey: teeP521PublicKey,          // TEE's P-521 public key
   rpcUrl: 'https://rpc.vela.network',     // for reading nonces from chain
   contractAddress: processorEndpointAddr,  // ProcessorEndpoint address
@@ -180,7 +180,7 @@ The facilitator is configured via environment variables:
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `RPC_URL` | Vela chain RPC endpoint | `https://rpc.vela.network` |
-| `FACILITATOR_PRIVATE_KEY` | EOA private key (pays gas + maxFeeValue) | `0xac0974...` |
+| `FACILITATOR_PRIVATE_KEY` | EOA private key (used to create an ethers.Signer; pays gas + maxFeeValue) | `0xac0974...` |
 | `PROCESSOR_ENDPOINT_ADDRESS` | ProcessorEndpoint contract address | `0x5FbDB2...` |
 | `CHAIN_ID` | Chain ID (for EIP-712 domain and CAIP-2 network derivation) | `2651420` |
 | `MAX_FEE_VALUE` | ETH in wei sent as `msg.value` for service fees | `1000000000000000` |
@@ -233,7 +233,7 @@ const facilitator = new x402Facilitator();
 registerPrivateVelaFixedScheme(facilitator, {
   rpcUrl: config.rpcUrl,                        // from RPC_URL
   contractAddress: config.contractAddress,        // from PROCESSOR_ENDPOINT_ADDRESS
-  signerPrivateKey: config.signerPrivateKey,      // from FACILITATOR_PRIVATE_KEY
+  signer: new ethers.Wallet(config.signerPrivateKey), // ethers.Signer from FACILITATOR_PRIVATE_KEY
   maxFeeValue: config.maxFeeValue,                // from MAX_FEE_VALUE
   applicationId: config.applicationId,            // from VELA_NOVA_APPLICATION_ID
   network: `eip155:${config.chainId}`,            // derived from CHAIN_ID
