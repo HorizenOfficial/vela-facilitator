@@ -1,145 +1,8 @@
-# vela-facilitator — Development Plan
+# vela-facilitator — Implementation Plan
 
-## Context
+> See `ARCHITECTURE.md` for project architecture, structure, and technical decisions.
 
-The vela-facilitator is a platform-level TypeScript service that submits Vela blockchain requests on behalf of users who don't hold ETH (gasless submission). Defined in FACILITATOR.md section 5.3, it has two layers:
-
-1. **Core facilitation** — POST /submit (generic, non-x402). Nonce queries are done directly on-chain by clients.
-2. **x402 scheme** — POST /verify, POST /settle, GET /supported (standard Coinbase x402 protocol)
-
-The design uses EIP-2612 (`permit`) for deposit authorization and EIP-712 for request authorization. Only `ASSOCIATEKEY` and `PROCESS` request types are supported via `submitRequestFor`. The nonce is not passed as a calldata parameter — the contract reads it from `facilitatorNonces[sender]` directly.
-
-Since the real contract changes (submitRequestFor, ERC-20 support) are not yet implemented in vela, we mock the entire on-chain layer with Anvil + mock contracts.
-
-## Assumptions Evaluation
-
-All user assumptions are **valid**, with these refinements:
-
-1. **Anvil + mock contract** — Valid. We also need a **MockEIP2612Token** (ERC-20 with `permit`) since USDC/EIP-2612 support is core to the flow.
-
-2. **New facilitator methods + TEE simulation** — Valid. The mock contract needs: `submitRequestFor()` (with `sender` parameter, nonce read from chain, request type validation, EIP-2612 permit), `facilitatorNonces`, `getFacilitatorNonce()`, split claim routing, and a `simulateProcessing()` helper.
-
-3. **mock/ folder** — Valid. Will contain Anvil launcher, contract deployment, and TEE simulation helper.
-
-4. **Integration tests** — Valid. Should cover: full gasless flow, nonce management, signature validation (valid + invalid), error cases, x402 verify/settle flow.
-
-5. **TypeScript + Solidity** — Valid. Matches the ecosystem.
-
-**Additional considerations**:
-- The mock contract must be a **standalone contract** (not extending ProcessorEndpoint) because the ERC-20 prerequisite changes don't exist in the current code.
-- All custom Vela logic is isolated in a **separate `@horizen/x402-private-vela-fixed` scheme package** that implements `SchemeNetworkFacilitator` from `@x402/core`. This scheme uses EIP-2612 (`permit`) for deposit authorization instead of EIP-3009 used by Coinbase's standard `exact` scheme, so the Coinbase reference facilitator's settle logic cannot be reused directly — our scheme implements its own verify/settle via `submitRequestFor()`.
-
-## Architecture: x402 Scheme Integration
-
-Following the Coinbase x402 facilitator pattern from `@x402/core`:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  vela-facilitator (Express server)                          │
-│                                                             │
-│  ┌───────────────────────┐   ┌────────────────────────────┐ │
-│  │ Core routes            │   │ x402 routes               │ │
-│  │  POST /submit          │   │  POST /verify             │ │
-│  │                        │   │  POST /settle             │ │
-│  │                        │   │  GET  /supported           │ │
-│  └──────────┬─────────────┘   └────────────┬──────────────┘ │
-│             │                              │                │
-│             │    ┌─────────────────────┐   │                │
-│             │    │  x402Facilitator    │   │                │
-│             │    │  (from @x402/core)  │◄──┘                │
-│             │    │                     │                    │
-│             │    │  .register(network, │                    │
-│             │    │    scheme)          │                    │
-│             │    └─────────┬──────────┘                    │
-│             │              │                               │
-│             ▼              ▼                                │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │  @horizen/x402-private-vela-fixed                    │  │
-│  │  (separate publishable package)                      │  │
-│  │                                                      │  │
-│  │  PrivateVelaFixedScheme implements                   │  │
-│  │    SchemeNetworkFacilitator {                         │  │
-│  │      scheme = "private-vela-fixed"                   │  │
-│  │      verify(payload, requirements) → VerifyResponse  │  │
-│  │      settle(payload, requirements) → SettleResponse  │  │
-│  │  }  (uses EIP-2612 permit, not EIP-3009)             │  │
-│  │                                                      │  │
-│  │  registerPrivateVelaFixedScheme(facilitator, config) │  │
-│  └──────────────────────────────────────────────────────┘  │
-│             │                                               │
-│             ▼                                               │
-│  ┌──────────────────────────────┐                          │
-│  │  ProcessorEndpoint contract  │                          │
-│  │  (on-chain via ethers.js)    │                          │
-│  └──────────────────────────────┘                          │
-└─────────────────────────────────────────────────────────────┘
-```
-
-The core `/submit` route reuses the scheme's underlying `verify()` + `settle()` logic but with a simpler non-x402 request format.
-
-## Project Structure
-
-```
-vela-facilitator/
-├── README.md                           # Project overview, architecture, getting started
-├── packages/
-│   ├── x402-private-vela-fixed/       # @horizen/x402-private-vela-fixed (publishable)
-│   │   ├── src/
-│   │   │   ├── index.ts               # Public exports
-│   │   │   ├── scheme.ts              # PrivateVelaFixedScheme (implements SchemeNetworkFacilitator)
-│   │   │   ├── register.ts            # registerPrivateVelaFixedScheme() helper
-│   │   │   ├── types.ts               # RequestAuthorization, DepositPermit, VelaPaymentPayload
-│   │   │   ├── verify.ts              # Off-chain EIP-712 + EIP-2612 signature validation
-│   │   │   └── settle.ts              # On-chain submitRequestFor() call
-│   │   ├── README.md                  # Scheme package docs: interface, types, registration example
-│   │   ├── package.json               # depends on @x402/core, ethers
-│   │   └── tsconfig.json
-│   │
-│   └── contracts/                      # Hardhat project for mock contracts
-│       ├── contracts/
-│       │   ├── Structs.sol             # Extended structs (adds facilitator, tokenAddress, assetAmount)
-│       │   ├── MockProcessorEndpoint.sol  # submitRequestFor + simulateProcessing + claims
-│       │   ├── MockEIP2612Token.sol    # ERC-20 with permit (EIP-2612)
-│       │   ├── MockTeeAuthenticator.sol
-│       │   └── MockAuthorityRegistry.sol
-│       ├── test/                       # Solidity-level unit tests (optional, Hardhat+Chai)
-│       ├── hardhat.config.ts
-│       ├── package.json                # depends on hardhat, @openzeppelin/contracts, typechain
-│       └── tsconfig.json
-│
-├── src/                                # Facilitator service
-│   ├── README.md                       # API reference: endpoints, request/response schemas, curl examples
-│   ├── index.ts                        # Express app + x402Facilitator setup + scheme registration
-│   ├── config.ts                       # Configuration (RPC URL, contract addr, private key, etc.)
-│   └── routes/
-│       ├── x402.ts                     # Standard x402 endpoints: POST /verify, POST /settle, GET /supported
-│       └── submit.ts                   # POST /submit (core, non-x402)
-│
-├── mock/                               # Mock infrastructure
-│   ├── anvil.ts                        # Anvil process management (start/stop/health check)
-│   ├── deploy.ts                       # Deploy mock contracts to Anvil, return addresses + instances
-│   └── simulate.ts                     # TEE processing simulation helper
-│
-├── test/                               # Integration tests (Vitest)
-│   ├── setup.ts                        # Global setup: Anvil + deploy + start facilitator
-│   ├── helpers/
-│   │   └── signer.ts                   # TestUser: EIP-712 + EIP-2612 signing helpers
-│   ├── core/
-│   │   └── submit.test.ts              # Core /submit flow tests
-│   ├── x402/
-│   │   ├── verify.test.ts              # x402 /verify tests
-│   │   └── settle.test.ts              # x402 /settle tests
-│   └── e2e/
-│       └── full-flow.test.ts           # Full lifecycle: sign → submit → process → claim
-│
-├── package.json                        # Root (facilitator service deps + workspace config)
-├── pnpm-workspace.yaml                 # Workspace: packages/*
-└── tsconfig.json
-```
-
-## Implementation Tasks
-
-### Task 0: Project Scaffolding
+## Task 0: Project Scaffolding
 **Scope**: Initialize pnpm workspace monorepo with three packages.
 **Dependencies**: None
 **Files**:
@@ -155,7 +18,7 @@ vela-facilitator/
 
 ---
 
-### Task 1: Mock Structs & Interfaces (Solidity)
+## Task 1: Mock Structs & Interfaces (Solidity)
 **Scope**: Extended Solidity data structures based on vela's [`Structs.sol`](https://github.com/HorizenOfficial/vela/blob/main/contracts/contracts/Structs.sol). Add `facilitator`, `tokenAddress`, `assetAmount` to PendingRequest. Add simplified interfaces (ITeeAuthenticator, IAuthorityRegistry). Token allowlists are global only (no per-app allowlists).
 **Dependencies**: Task 0
 **Files**:
@@ -166,7 +29,7 @@ vela-facilitator/
 
 ---
 
-### Task 2: MockEIP2612Token (Solidity)
+## Task 2: MockEIP2612Token (Solidity)
 **Scope**: ERC-20 token implementing EIP-2612 `permit`. Includes:
 - Standard ERC-20 (mint, transfer, balanceOf, approve, transferFrom)
 - `permit(owner, spender, value, deadline, v, r, s)` with EIP-712 signature verification
@@ -180,8 +43,8 @@ vela-facilitator/
 
 ---
 
-### Task 3: MockProcessorEndpoint (Solidity)
-**Scope**: Main mock contract implementing the "future" ProcessorEndpoint with facilitator support as described in FACILITATOR.md.
+## Task 3: MockProcessorEndpoint (Solidity)
+**Scope**: Main mock contract implementing the "future" ProcessorEndpoint with facilitator support as described in [FACILITATOR.md](https://github.com/HorizenOfficial/vela/blob/main/docs/design/FACILITATOR.md).
 **Dependencies**: Task 1, Task 2
 **Key functions**:
 - `submitRequest()` — existing direct path (ETH-only, simplified)
@@ -198,7 +61,7 @@ vela-facilitator/
 
 ---
 
-### Task 4: Mock Infrastructure (Anvil + Deploy)
+## Task 4: Mock Infrastructure (Anvil + Deploy)
 **Scope**: TypeScript utilities to manage Anvil lifecycle and deploy mock contracts.
 **Dependencies**: Task 3
 **Files**:
@@ -209,7 +72,7 @@ vela-facilitator/
 
 ---
 
-### Task 5: Scheme Types (`@horizen/x402-private-vela-fixed`)
+## Task 5: Scheme Types (`@horizen/x402-private-vela-fixed`)
 **Scope**: TypeScript type definitions for the Vela payment scheme.
 **Dependencies**: Task 0
 **Files**:
@@ -217,13 +80,16 @@ vela-facilitator/
   - `RequestAuthorization` — EIP-712 typed data fields (sender, protocolVersion, applicationId, requestType, payloadHash, tokenAddress, assetAmount, nonce, deadline)
   - `DepositPermit` — EIP-2612 fields (owner, spender, value, nonce, deadline) + signature components (v, r, s)
   - `VelaPaymentPayload` — scheme-specific payload (sender, requestSignature, depositPermit, requestAuthorization, payload)
+  - `VelaPaymentRequirementsExtra` — scheme-specific extra fields in `PaymentRequirements`: `{ invoiceId }`. The `invoiceId` (required, max 100 chars) lets the seller identify and correlate the payment; the client must include it in the vela-nova transfer payload as `invoice_id`. Note: `applicationId` (always `1`, vela-nova) and `requestType` (always `PROCESS`) are constants of the scheme, not parameters.
   - `VelaSchemeConfig` — config for scheme (rpcUrl, contractAddress, signerPrivateKey, maxFeeValue)
+  - Scheme constants: `VELA_NOVA_APPLICATION_ID = 1`, `REQUEST_TYPE_PROCESS = 1` — hardcoded in the scheme, not configurable
+  - vela-nova payload types: `TransferInstruction { to, amount, invoice_id }`, `PayloadInstructions { type: "transfer", transfer }` — these represent the JSON payload that gets encrypted before submission
   - EIP-712 domain constants (name: "Vela", version, chainId, verifyingContract) + REQUEST_AUTHORIZATION_TYPEHASH
 **Acceptance**: Types compile and are importable.
 
 ---
 
-### Task 6: Scheme Verify (`@horizen/x402-private-vela-fixed`)
+## Task 6: Scheme Verify (`@horizen/x402-private-vela-fixed`)
 **Scope**: Off-chain signature validation logic. Verifies both EIP-712 request authorization and EIP-2612 deposit permit without submitting on-chain.
 **Dependencies**: Task 5
 **Files**:
@@ -234,13 +100,14 @@ vela-facilitator/
   - Verify payloadHash matches keccak256(payload)
   - Read nonce from on-chain `facilitatorNonces[sender]` and verify it matches the signed nonce
   - If assetAmount > 0: verify EIP-2612 permit signature (recover signer, check owner/spender/value/deadline match)
+  - If `PaymentRequirements.extra.invoiceId` is present: verify the payload contains a matching `invoice_id` in the transfer instruction (required for x402 flow — seller must be able to identify the payment)
   - Return `VerifyResponse` (from `@x402/core`)
 **Acceptance**: Unit tests for valid + invalid signatures.
 
 ---
 
-### Task 7: Scheme Settle (`@horizen/x402-private-vela-fixed`)
-**Scope**: On-chain settlement — calls `submitRequestFor()` on the ProcessorEndpoint contract.
+## Task 7: Scheme Settle (`@horizen/x402-private-vela-fixed`)
+**Scope**: On-chain settlement — calls `submitRequestFor()` on the ProcessorEndpoint contract. Note: a successful settle confirms on-chain submission, not TEE completion (see ARCHITECTURE.md "Settle Semantics").
 **Dependencies**: Task 5
 **Files**:
 - `/packages/x402-private-vela-fixed/src/settle.ts`:
@@ -254,7 +121,7 @@ vela-facilitator/
 
 ---
 
-### Task 8: Scheme Class + Registration Helper
+## Task 8: Scheme Class + Registration Helper
 **Scope**: Wire verify + settle into `SchemeNetworkFacilitator` implementation and provide registration helper.
 **Dependencies**: Task 6, Task 7
 **Files**:
@@ -262,7 +129,7 @@ vela-facilitator/
   - `PrivateVelaFixedScheme implements SchemeNetworkFacilitator`
   - `scheme = "private-vela-fixed"`
   - `caipFamily = "eip155:*"`
-  - `getExtra(network)` → undefined (or could include contract address)
+  - `getExtra(network)` → `{ invoiceId }` (scheme-specific PaymentRequirements extra; `applicationId = 1` and `requestType = PROCESS` are hardcoded constants of the scheme)
   - `getSigners(network)` → facilitator wallet address
   - `verify()` → delegates to verify.ts
   - `settle()` → delegates to settle.ts
@@ -274,7 +141,7 @@ vela-facilitator/
 
 ---
 
-### Task 9: Facilitator Server + x402 Routes
+## Task 9: Facilitator Server + x402 Routes
 **Scope**: Express.js HTTP server that creates an `x402Facilitator` from `@x402/core` and registers our scheme. Exposes standard x402 endpoints.
 **Dependencies**: Task 8
 **Files**:
@@ -291,8 +158,8 @@ vela-facilitator/
 
 ---
 
-### Task 10: Core Facilitation Routes
-**Scope**: Non-x402 endpoint for direct facilitator usage (mobile SDK, CLI, bots). Note: nonce queries are NOT part of the facilitator API — clients read `facilitatorNonces[user]` directly from the `ProcessorEndpoint` contract (public mapping with auto-generated getter).
+## Task 10: Core Facilitation Routes
+**Scope**: Non-x402 endpoint for direct facilitator usage (mobile SDK, CLI, bots). Unlike the x402 scheme (which targets vela-nova specifically), `/submit` is **application-agnostic** — it forwards any `ASSOCIATEKEY` or `PROCESS` request to any application on the chain. Note: nonce queries are NOT part of the facilitator API — clients read `facilitatorNonces[user]` directly from the `ProcessorEndpoint` contract (public mapping with auto-generated getter).
 **Dependencies**: Task 9
 **Files**:
 - `/src/routes/submit.ts` — `POST /submit`:
@@ -304,22 +171,24 @@ vela-facilitator/
 
 ---
 
-### Task 11: Test Setup + Helpers
+## Task 11: Test Setup + Helpers
 **Scope**: Shared test infrastructure: Anvil lifecycle, contract deployment, user signing helpers.
 **Dependencies**: Task 4, Task 5
 **Files**:
 - `/test/setup.ts` — Vitest globalSetup: start Anvil, deploy contracts, mint tokens, create facilitator service, expose fixtures (contract addresses, RPC URL, server URL)
 - `/test/helpers/signer.ts` — `TestUser` class:
-  - Creates ethers Wallet
+  - Creates ethers Wallet + P-521 key pair (for vela-nova key registration)
   - `signRequestAuthorization(params)` → EIP-712 signature (includes `sender` field, nonce read from chain)
   - `signDepositPermit(params)` → EIP-2612 permit signature (v, r, s)
+  - `buildAssociateKeyPayload()` → ASSOCIATEKEY payload with raw P-521 public key bytes (133 bytes, unencrypted)
+  - `buildTransferPayload(params)` → vela-nova PROCESS transfer payload: `{ type: "transfer", transfer: { to, amount, invoice_id } }` (in tests, payload is passed as plaintext since we don't have a real TEE; the mock contract doesn't decrypt)
   - `buildSubmitPayload(params)` → full payload ready for POST /submit
   - `buildX402Payload(params)` → full x402 PaymentPayload ready for POST /settle
 **Acceptance**: Setup starts Anvil, deploys contracts, provides ready-to-use fixtures.
 
 ---
 
-### Task 12: Core Integration Tests
+## Task 12: Core Integration Tests
 **Scope**: Tests for POST /submit.
 **Dependencies**: Task 10, Task 11
 **Files**:
@@ -336,7 +205,7 @@ vela-facilitator/
 
 ---
 
-### Task 13: x402 Integration Tests
+## Task 13: x402 Integration Tests
 **Scope**: Tests for POST /verify, POST /settle, GET /supported.
 **Dependencies**: Task 9, Task 11
 **Files**:
@@ -353,26 +222,40 @@ vela-facilitator/
 
 ---
 
-### Task 14: End-to-End Flow Test
-**Scope**: Full lifecycle test covering the complete facilitator flow.
+## Task 14: End-to-End Flow Test
+**Scope**: Full lifecycle test covering the complete facilitator flow, including vela-nova specific flows with key registration and invoiceId.
 **Dependencies**: Task 12, Task 13
 **Files**:
 - `/test/e2e/full-flow.test.ts`:
-  1. User queries `facilitatorNonces[user]` directly from contract → nonce = 0
-  2. User signs EIP-712 + EIP-2612 permit for a PROCESS request with ERC-20 deposit
-  3. Facilitator receives `POST /submit` → returns `{ requestId, txHash }`
-  4. Verify on-chain: PendingRequest has sender = user, facilitator = facilitator address
-  5. Call `simulateProcessing()` → request completed successfully
-  6. User claims asset refund via `claim(tokenAddress, user)`
-  7. Facilitator claims ETH fee refund via `claim(address(0), facilitator)`
-  8. Error case: simulateProcessing with error → user gets deposit back, facilitator gets partial fee refund
-  9. ASSOCIATEKEY flow: assetAmount = 0, no EIP-2612 permit needed
-  10. x402 flow: same lifecycle but via POST /verify + POST /settle
-**Acceptance**: All tests pass, demonstrating the complete facilitator lifecycle.
+
+  **Core /submit flow (application-agnostic):**
+  1. Register buyer's P-521 key: `POST /submit` with `requestType = ASSOCIATEKEY`, `assetAmount = 0`, payload = raw P-521 public key bytes (133 bytes). No EIP-2612 permit needed.
+  2. Register seller's P-521 key: same ASSOCIATEKEY flow for the seller address.
+  3. Buyer queries `facilitatorNonces[buyer]` directly from contract → verify nonce incremented after registrations.
+  4. Buyer signs EIP-712 + EIP-2612 permit for a PROCESS transfer request with ERC-20 deposit. Payload is a vela-nova transfer instruction: `{ type: "transfer", transfer: { to: seller, amount, invoice_id: "INV-001" } }`.
+  5. Facilitator receives `POST /submit` → returns `{ requestId, txHash }`.
+  6. Verify on-chain: PendingRequest has sender = buyer, facilitator = facilitator address.
+  7. Call `simulateProcessing()` → request completed successfully.
+  8. Buyer claims asset refund via `claim(tokenAddress, buyer)`.
+  9. Facilitator claims ETH fee refund via `claim(address(0), facilitator)`.
+  10. Error case: simulateProcessing with error → buyer gets deposit back, facilitator gets partial fee refund.
+
+  **x402 flow (vela-nova private transfer with invoiceId):**
+  11. (Keys already registered from steps 1-2.)
+  12. Build `PaymentRequirements` with `extra: { invoiceId: "INV-002" }` (applicationId and requestType are scheme constants — always vela-nova PROCESS).
+  13. Build vela-nova transfer payload with `invoice_id: "INV-002"`, sign EIP-712 + EIP-2612.
+  14. `POST /verify` with payload + requirements → `{ isValid: true }`.
+  15. `POST /settle` with payload + requirements → submits on-chain → returns `{ success: true, txHash, requestId }`. Note: this confirms on-chain submission, not TEE completion (async).
+  16. Verify on-chain: PendingRequest created correctly.
+  17. Verify invoiceId mismatch: `POST /verify` with `extra.invoiceId: "INV-002"` but payload `invoice_id: "WRONG"` → `{ isValid: false }`.
+
+**Acceptance**: All tests pass, demonstrating the complete facilitator lifecycle including vela-nova key registration prerequisites, invoiceId validation, and async settle semantics.
+
+Note: the resource server (seller) is **not** part of the facilitator and is **not** tested here. The seller is responsible for: returning 402 with PaymentRequirements, calling our verify/settle endpoints, and waiting for the vela-nova encrypted event with `invoice_id` to confirm payment completion.
 
 ---
 
-### Task 15: Documentation (README files)
+## Task 15: Documentation (README files)
 **Scope**: Three README.md files documenting the project.
 **Dependencies**: Task 10 (routes finalized), Task 8 (scheme finalized)
 **Files**:
@@ -400,66 +283,3 @@ vela-facilitator/
   - Exported types and interfaces
   - EIP-712 domain and type definitions
 **Acceptance**: All three READMEs are clear, accurate, and include working examples.
-
-## Key Technical Decisions
-
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| x402 integration | Use `@x402/core` `x402Facilitator` + custom scheme | Follows Coinbase pattern; uses EIP-2612 instead of EIP-3009, so own verify/settle logic needed |
-| Scheme package | Separate `@horizen/x402-private-vela-fixed` in monorepo | Publishable independently; custom verify/settle via `submitRequestFor()` |
-| Deposit authorization | EIP-2612 (`permit`) | More widely adopted than EIP-3009; sequential nonces; sufficient security for our use case |
-| Mock contract | Standalone (not extending ProcessorEndpoint) | ERC-20 prerequisite changes don't exist yet; cleaner self-contained mock |
-| Local chain | Anvil (`anvil` CLI from Foundry) | Standard, fast, deterministic accounts |
-| Contract tooling | Hardhat + typechain | Matches vela contracts repo; TypeScript bindings |
-| HTTP framework | Express.js | Simple, widely used |
-| Testing | Vitest | Fast, TypeScript-native |
-| Ethereum library | ethers.js v6 | Matches vela-common-ts |
-| Package manager | pnpm workspaces | Standard for monorepos, good for local package linking |
-
-## Key Interface: SchemeNetworkFacilitator (from @x402/core)
-
-```typescript
-interface SchemeNetworkFacilitator {
-  readonly scheme: string;                    // "private-vela-fixed"
-  readonly caipFamily: string;                // "eip155:*"
-
-  getExtra(network: Network): Record<string, unknown> | undefined;
-  getSigners(network: string): string[];
-
-  verify(payload: PaymentPayload, requirements: PaymentRequirements,
-         context?: FacilitatorContext): Promise<VerifyResponse>;
-  settle(payload: PaymentPayload, requirements: PaymentRequirements,
-         context?: FacilitatorContext): Promise<SettleResponse>;
-}
-```
-
-## Facilitator Server Setup (conceptual)
-
-```typescript
-import { x402Facilitator } from '@x402/core/facilitator';
-import { registerPrivateVelaFixedScheme } from '@horizen/x402-private-vela-fixed';
-
-const facilitator = new x402Facilitator();
-registerPrivateVelaFixedScheme(facilitator, {
-  rpcUrl: config.rpcUrl,
-  contractAddress: config.contractAddress,
-  signerPrivateKey: config.signerPrivateKey,
-  maxFeeValue: config.maxFeeValue,
-  network: 'eip155:2651420',  // Vela chain
-});
-
-// x402 routes delegate to facilitator.verify() / facilitator.settle()
-// Core /submit route reuses scheme logic with simpler request format
-// No /nonce endpoint — clients read facilitatorNonces[user] directly from contract
-```
-
-## Verification
-
-After all tasks are complete:
-```bash
-pnpm install                                              # Dependencies
-pnpm --filter contracts exec hardhat compile              # Contracts compile
-pnpm --filter @horizen/x402-private-vela-fixed run build  # Scheme package builds
-pnpm test                                                 # All integration + e2e tests pass
-pnpm dev                                                  # Service starts, curl /supported works
-```
