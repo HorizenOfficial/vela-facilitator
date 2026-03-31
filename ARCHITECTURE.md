@@ -134,6 +134,22 @@ vela-facilitator/
 └── tsconfig.json
 ```
 
+## Configuration
+
+The facilitator is configured via environment variables:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `RPC_URL` | Vela chain RPC endpoint | `https://rpc.vela.network` |
+| `FACILITATOR_PRIVATE_KEY` | EOA private key (pays gas + maxFeeValue) | `0xac0974...` |
+| `PROCESSOR_ENDPOINT_ADDRESS` | ProcessorEndpoint contract address | `0x5FbDB2...` |
+| `CHAIN_ID` | Chain ID (for EIP-712 domain and CAIP-2 network derivation) | `2651420` |
+| `MAX_FEE_VALUE` | ETH in wei sent as `msg.value` for service fees | `1000000000000000` |
+| `VELA_NOVA_APPLICATION_ID` | Application ID of the vela-nova private transfer app (used by x402 scheme) | `1` |
+| `PORT` | HTTP server port | `3000` |
+
+The token address is **not** a configuration parameter — it comes from the client payload (`/submit`) or from `PaymentRequirements.asset` (x402 flow, set by the seller in the 402 response). The contract validates it against `globalAllowedTokens` on-chain.
+
 ## Key Technical Decisions
 
 | Decision | Choice | Rationale |
@@ -176,11 +192,12 @@ import { registerPrivateVelaFixedScheme } from '@horizen/x402-private-vela-fixed
 
 const facilitator = new x402Facilitator();
 registerPrivateVelaFixedScheme(facilitator, {
-  rpcUrl: config.rpcUrl,
-  contractAddress: config.contractAddress,
-  signerPrivateKey: config.signerPrivateKey,
-  maxFeeValue: config.maxFeeValue,
-  network: 'eip155:2651420',  // Vela chain
+  rpcUrl: config.rpcUrl,                        // from RPC_URL
+  contractAddress: config.contractAddress,        // from PROCESSOR_ENDPOINT_ADDRESS
+  signerPrivateKey: config.signerPrivateKey,      // from FACILITATOR_PRIVATE_KEY
+  maxFeeValue: config.maxFeeValue,                // from MAX_FEE_VALUE
+  applicationId: config.applicationId,            // from VELA_NOVA_APPLICATION_ID
+  network: `eip155:${config.chainId}`,            // derived from CHAIN_ID
 });
 
 // x402 routes delegate to facilitator.verify() / facilitator.settle()

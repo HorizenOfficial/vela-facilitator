@@ -78,8 +78,8 @@
   - `DepositPermit` — EIP-2612 fields (owner, spender, value, nonce, deadline) + signature components (v, r, s)
   - `VelaPaymentPayload` — scheme-specific payload (sender, requestSignature, depositPermit, requestAuthorization, payload)
   - `VelaPaymentRequirementsExtra` — scheme-specific extra fields in `PaymentRequirements`: `{ invoiceId }`. The `invoiceId` (max 100 chars) lets the seller track and correlate the payment; the client is expected to include it in the vela-nova transfer payload as `invoice_id`. The facilitator cannot verify the match (payload is encrypted) — the seller checks it via TEE events. Note: `applicationId` (always `1`, vela-nova) and `requestType` (always `PROCESS`) are constants of the scheme, not parameters.
-  - `VelaSchemeConfig` — config for scheme (rpcUrl, contractAddress, signerPrivateKey, maxFeeValue)
-  - Scheme constants: `VELA_NOVA_APPLICATION_ID = 1`, `REQUEST_TYPE_PROCESS = 1` — hardcoded in the scheme, not configurable
+  - `VelaSchemeConfig` — config for scheme (rpcUrl, contractAddress, signerPrivateKey, maxFeeValue, applicationId)
+  - Scheme constants: `REQUEST_TYPE_PROCESS = 1` — hardcoded in the scheme. `applicationId` comes from `VelaSchemeConfig` (env var `VELA_NOVA_APPLICATION_ID`).
   - vela-nova payload types: `TransferInstruction { to, amount, invoice_id }`, `PayloadInstructions { type: "transfer", transfer }` — these represent the JSON payload that gets encrypted before submission
   - EIP-712 domain constants (name: "Vela", version, chainId, verifyingContract) + REQUEST_AUTHORIZATION_TYPEHASH
 **Acceptance**: Types compile and are importable.
@@ -142,7 +142,15 @@
 **Scope**: Express.js HTTP server that creates an `x402Facilitator` from `@x402/core` and registers our scheme. Exposes standard x402 endpoints.
 **Dependencies**: Task 8
 **Files**:
-- `/src/config.ts` — Configuration: RPC URL, contract address, facilitator private key, maxFeeValue, network (e.g., `eip155:2651420`), port
+- `/src/config.ts` — Configuration from environment variables:
+  - `RPC_URL` — Vela chain RPC endpoint
+  - `FACILITATOR_PRIVATE_KEY` — EOA private key (pays gas + maxFeeValue)
+  - `PROCESSOR_ENDPOINT_ADDRESS` — ProcessorEndpoint contract address
+  - `CHAIN_ID` — Chain ID (for EIP-712 domain and CAIP-2 network derivation)
+  - `MAX_FEE_VALUE` — ETH in wei sent as `msg.value` for service fees
+  - `VELA_NOVA_APPLICATION_ID` — Application ID of the vela-nova private transfer app (used by x402 scheme; currently `1`)
+  - `PORT` — HTTP server port
+  - Note: token address is not configured here — it comes from the client payload (`/submit`) or from `PaymentRequirements.asset` (x402 flow, set by the seller). The contract validates it against `globalAllowedTokens` on-chain.
 - `/src/index.ts` — Express app setup:
   - Create `x402Facilitator` from `@x402/core`
   - Call `registerPrivateVelaFixedScheme(facilitator, config)` to register our scheme
