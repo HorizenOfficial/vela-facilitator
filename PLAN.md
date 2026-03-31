@@ -175,13 +175,14 @@
 **Scope**: Shared test infrastructure: Anvil lifecycle, contract deployment, user signing helpers.
 **Dependencies**: Task 4, Task 5
 **Files**:
-- `/test/setup.ts` — Vitest globalSetup: start Anvil, deploy contracts, mint tokens, create facilitator service, expose fixtures (contract addresses, RPC URL, server URL)
+- `/test/setup.ts` — Vitest globalSetup: start Anvil, deploy contracts, mint tokens, read TEE P-521 public key from `MockTeeAuthenticator.getPubSecp521r1()`, create facilitator service, expose fixtures (contract addresses, RPC URL, server URL, TEE public key)
 - `/test/helpers/signer.ts` — `TestUser` class:
-  - Creates ethers Wallet + P-521 key pair (for vela-nova key registration)
+  - Creates ethers Wallet + P-521 key pair (user's encryption key)
+  - Receives TEE P-521 public key (from test setup) for payload encryption
   - `signRequestAuthorization(params)` → EIP-712 signature (includes `sender` field, nonce read from chain)
   - `signDepositPermit(params)` → EIP-2612 permit signature (v, r, s)
-  - `buildAssociateKeyPayload()` → ASSOCIATEKEY payload with raw P-521 public key bytes (133 bytes, unencrypted)
-  - `buildTransferPayload(params)` → vela-nova PROCESS transfer payload: `{ type: "transfer", transfer: { to, amount, invoice_id } }` (in tests, payload is passed as plaintext since we don't have a real TEE; the mock contract doesn't decrypt)
+  - `encryptPayload(payload)` → encrypts JSON payload with TEE's P-521 public key (using ECIES from [`vela-common-ts`](https://github.com/HorizenOfficial/vela-common-ts))
+  - `buildTransferPayload(params)` → builds vela-nova transfer instruction `{ type: "transfer", transfer: { to, amount, invoice_id } }`, encrypts it, returns encrypted bytes
   - `buildSubmitPayload(params)` → full payload ready for POST /submit
   - `buildX402Payload(params)` → full x402 PaymentPayload ready for POST /settle
 **Acceptance**: Setup starts Anvil, deploys contracts, provides ready-to-use fixtures.
@@ -228,30 +229,27 @@
 **Files**:
 - `/test/e2e/full-flow.test.ts`:
 
-  **Core /submit flow (application-agnostic):**
-  1. Register buyer's P-521 key: `POST /submit` with `requestType = ASSOCIATEKEY`, `assetAmount = 0`, payload = raw P-521 public key bytes (133 bytes). No EIP-2612 permit needed.
-  2. Register seller's P-521 key: same ASSOCIATEKEY flow for the seller address.
-  3. Buyer queries `facilitatorNonces[buyer]` directly from contract → verify nonce incremented after registrations.
-  4. Buyer signs EIP-712 + EIP-2612 permit for a PROCESS transfer request with ERC-20 deposit. Payload is a vela-nova transfer instruction: `{ type: "transfer", transfer: { to: seller, amount, invoice_id: "INV-001" } }`.
-  5. Facilitator receives `POST /submit` → returns `{ requestId, txHash }`.
-  6. Verify on-chain: PendingRequest has sender = buyer, facilitator = facilitator address.
-  7. Call `simulateProcessing()` → request completed successfully.
-  8. Buyer claims asset refund via `claim(tokenAddress, buyer)`.
-  9. Facilitator claims ETH fee refund via `claim(address(0), facilitator)`.
-  10. Error case: simulateProcessing with error → buyer gets deposit back, facilitator gets partial fee refund.
+  **Core /submit flow (generic request):**
+  1. Submit an ASSOCIATEKEY request via `POST /submit`: `requestType = ASSOCIATEKEY`, `assetAmount = 0`, payload = raw P-521 public key bytes (133 bytes, unencrypted). No EIP-2612 permit needed.
+  2. Verify on-chain: PendingRequest created with sender = user, facilitator = facilitator address.
+  3. Verify `facilitatorNonces[user]` incremented.
+  4. This proves the facilitator can forward any generic request — it is application-agnostic.
 
-  **x402 flow (vela-nova private transfer with invoiceId):**
-  11. (Keys already registered from steps 1-2.)
-  12. Build `PaymentRequirements` with `extra: { invoiceId: "INV-002" }` (applicationId and requestType are scheme constants — always vela-nova PROCESS).
-  13. Build vela-nova transfer payload with `invoice_id: "INV-002"`, sign EIP-712 + EIP-2612.
-  14. `POST /verify` with payload + requirements → `{ isValid: true }`.
-  15. `POST /settle` with payload + requirements → submits on-chain → returns `{ success: true, txHash, requestId }`. Note: this confirms on-chain submission, not TEE completion (async).
-  16. Verify on-chain: PendingRequest created correctly.
-  17. Verify invoiceId mismatch: `POST /verify` with `extra.invoiceId: "INV-002"` but payload `invoice_id: "WRONG"` → `{ isValid: false }`.
+  **x402 flow (full vela-nova PROCESS lifecycle with invoiceId):**
+  5. Build `PaymentRequirements` with `extra: { invoiceId: "INV-001" }` (applicationId and requestType are scheme constants — always vela-nova PROCESS).
+  6. Build vela-nova transfer payload `{ type: "transfer", transfer: { to: seller, amount, invoice_id: "INV-001" } }`, encrypt with TEE's P-521 public key, sign EIP-712 + EIP-2612 permit.
+  7. `POST /verify` with payload + requirements → `{ isValid: true }`.
+  8. `POST /settle` with payload + requirements → submits on-chain → returns `{ success: true, txHash, requestId }`. Note: this confirms on-chain submission, not TEE completion (async).
+  9. Verify on-chain: PendingRequest has sender = buyer, facilitator = facilitator address.
+  10. Call `simulateProcessing()` → request completed successfully.
+  11. Buyer claims asset refund via `claim(tokenAddress, buyer)`.
+  12. Facilitator claims ETH fee refund via `claim(address(0), facilitator)`.
+  13. Error case: simulateProcessing with error → buyer gets deposit back, facilitator gets partial fee refund.
+  14. Verify invoiceId mismatch: `POST /verify` with `extra.invoiceId: "INV-001"` but payload `invoice_id: "WRONG"` → `{ isValid: false }`.
 
-**Acceptance**: All tests pass, demonstrating the complete facilitator lifecycle including vela-nova key registration prerequisites, invoiceId validation, and async settle semantics.
+**Acceptance**: All tests pass, demonstrating the complete facilitator lifecycle including invoiceId validation, payload encryption, and async settle semantics.
 
-Note: the resource server (seller) is **not** part of the facilitator and is **not** tested here. The seller is responsible for: returning 402 with PaymentRequirements, calling our verify/settle endpoints, and waiting for the vela-nova encrypted event with `invoice_id` to confirm payment completion.
+Note: in a real deployment, both buyer and seller must have previously registered P-521 keys (`ASSOCIATEKEY`) and the buyer must have deposited funds into vela-nova's privacy layer before transfers can succeed. These are vela-nova app-level prerequisites — the mock contract does not enforce them. The resource server (seller) is also **not** tested here.
 
 ---
 
