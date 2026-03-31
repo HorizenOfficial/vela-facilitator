@@ -80,7 +80,7 @@
   - `RequestAuthorization` — EIP-712 typed data fields (sender, protocolVersion, applicationId, requestType, payloadHash, tokenAddress, assetAmount, nonce, deadline)
   - `DepositPermit` — EIP-2612 fields (owner, spender, value, nonce, deadline) + signature components (v, r, s)
   - `VelaPaymentPayload` — scheme-specific payload (sender, requestSignature, depositPermit, requestAuthorization, payload)
-  - `VelaPaymentRequirementsExtra` — scheme-specific extra fields in `PaymentRequirements`: `{ invoiceId }`. The `invoiceId` (required, max 100 chars) lets the seller identify and correlate the payment; the client must include it in the vela-nova transfer payload as `invoice_id`. Note: `applicationId` (always `1`, vela-nova) and `requestType` (always `PROCESS`) are constants of the scheme, not parameters.
+  - `VelaPaymentRequirementsExtra` — scheme-specific extra fields in `PaymentRequirements`: `{ invoiceId }`. The `invoiceId` (max 100 chars) lets the seller track and correlate the payment; the client is expected to include it in the vela-nova transfer payload as `invoice_id`. The facilitator cannot verify the match (payload is encrypted) — the seller checks it via TEE events. Note: `applicationId` (always `1`, vela-nova) and `requestType` (always `PROCESS`) are constants of the scheme, not parameters.
   - `VelaSchemeConfig` — config for scheme (rpcUrl, contractAddress, signerPrivateKey, maxFeeValue)
   - Scheme constants: `VELA_NOVA_APPLICATION_ID = 1`, `REQUEST_TYPE_PROCESS = 1` — hardcoded in the scheme, not configurable
   - vela-nova payload types: `TransferInstruction { to, amount, invoice_id }`, `PayloadInstructions { type: "transfer", transfer }` — these represent the JSON payload that gets encrypted before submission
@@ -100,8 +100,8 @@
   - Verify payloadHash matches keccak256(payload)
   - Read nonce from on-chain `facilitatorNonces[sender]` and verify it matches the signed nonce
   - If assetAmount > 0: verify EIP-2612 permit signature (recover signer, check owner/spender/value/deadline match)
-  - If `PaymentRequirements.extra.invoiceId` is present: verify the payload contains a matching `invoice_id` in the transfer instruction (required for x402 flow — seller must be able to identify the payment)
   - Return `VerifyResponse` (from `@x402/core`)
+  - Note: `PaymentRequirements.extra.invoiceId` is **not** verified by the facilitator — the payload is encrypted and the facilitator cannot read it. The seller is responsible for checking that the TEE event's `invoice_id` matches after processing.
 **Acceptance**: Unit tests for valid + invalid signatures.
 
 ---
@@ -245,9 +245,10 @@
   11. Buyer claims asset refund via `claim(tokenAddress, buyer)`.
   12. Facilitator claims ETH fee refund via `claim(address(0), facilitator)`.
   13. Error case: simulateProcessing with error → buyer gets deposit back, facilitator gets partial fee refund.
-  14. Verify invoiceId mismatch: `POST /verify` with `extra.invoiceId: "INV-001"` but payload `invoice_id: "WRONG"` → `{ isValid: false }`.
 
-**Acceptance**: All tests pass, demonstrating the complete facilitator lifecycle including invoiceId validation, payload encryption, and async settle semantics.
+**Acceptance**: All tests pass, demonstrating the complete facilitator lifecycle including payload encryption and async settle semantics.
+
+Note: `invoiceId` in `PaymentRequirements.extra` is for the seller's tracking only — the facilitator cannot verify it because the payload is encrypted. The seller checks the `invoice_id` in the TEE event after processing.
 
 Note: in a real deployment, both buyer and seller must have previously registered P-521 keys (`ASSOCIATEKEY`) and the buyer must have deposited funds into vela-nova's privacy layer before transfers can succeed. These are vela-nova app-level prerequisites — the mock contract does not enforce them. The resource server (seller) is also **not** tested here.
 
