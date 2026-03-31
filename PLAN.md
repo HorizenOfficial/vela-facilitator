@@ -50,8 +50,6 @@
 - `submitRequest()` — existing direct path (ETH-only, simplified)
 - `submitRequestFor(sender, ...)` — facilitator path: verify request type is supported (ASSOCIATEKEY or PROCESS only), verify deadline, read nonce from `facilitatorNonces[sender]` (nonce is NOT a calldata parameter), build EIP-712 hash, recover user from sig, verify recovered == sender, consume nonce, execute EIP-2612 permit + transferFrom, create PendingRequest(sender=user, facilitator=msg.sender), emit event. `depositPermit` param is `abi.encode(uint8 v, bytes32 r, bytes32 s)`.
 - `facilitatorNonces` mapping + `getFacilitatorNonce(address)`
-- `simulateProcessing(requestId, newStateRoot, refund, applicationFees, errorCode)` — processes head request as if TEE had, with split claim routing
-- `claim(tokenAddress, payee)` — permissionless claim for both ETH and ERC-20
 - `addAllowedToken(tokenAddress)` — simplified global token allowlist (no per-app allowlists)
 - EIP-712 domain separator (name: "Vela") + REQUEST_AUTHORIZATION_TYPEHASH (includes `sender` field)
 - `RequestAuthorization` struct: `{ sender, protocolVersion, applicationId, requestType, payloadHash, tokenAddress, assetAmount, nonce, deadline }`
@@ -67,7 +65,6 @@
 **Files**:
 - `/mock/anvil.ts` — `startAnvil()`, `stopAnvil()`, `waitForReady()`. Returns RPC URL + pre-funded accounts.
 - `/mock/deploy.ts` — `deployContracts(provider)`. Deploys MockProcessorEndpoint + MockEIP2612Token. Returns typed contract instances (from typechain). Sets up initial state (deploy app, allow token, mint tokens to test users).
-- `/mock/simulate.ts` — `simulateProcessing(contract, requestId, opts)`. Calls `simulateProcessing()` on mock contract.
 **Acceptance**: Programmatically starts Anvil, deploys contracts, and returns usable instances.
 
 ---
@@ -229,11 +226,12 @@
 **Files**:
 - `/test/e2e/full-flow.test.ts`:
 
-  **Core /submit flow (generic request):**
+  **Core /submit flow (generic requests):**
   1. Submit an ASSOCIATEKEY request via `POST /submit`: `requestType = ASSOCIATEKEY`, `assetAmount = 0`, payload = raw P-521 public key bytes (133 bytes, unencrypted). No EIP-2612 permit needed.
   2. Verify on-chain: PendingRequest created with sender = user, facilitator = facilitator address.
   3. Verify `facilitatorNonces[user]` incremented.
-  4. This proves the facilitator can forward any generic request — it is application-agnostic.
+  4. Submit a PROCESS request via `POST /submit` with `assetAmount > 0`: EIP-712 request signature + EIP-2612 permit signature, encrypted payload. Verifies the facilitator correctly handles the two-signature flow with ERC-20 deposit.
+  5. Verify on-chain: PendingRequest has correct sender, facilitator, tokenAddress, assetAmount.
 
   **x402 flow (full vela-nova PROCESS lifecycle with invoiceId):**
   5. Build `PaymentRequirements` with `extra: { invoiceId: "INV-001" }` (applicationId and requestType are scheme constants — always vela-nova PROCESS).
@@ -241,10 +239,6 @@
   7. `POST /verify` with payload + requirements → `{ isValid: true }`.
   8. `POST /settle` with payload + requirements → submits on-chain → returns `{ success: true, txHash, requestId }`. Note: this confirms on-chain submission, not TEE completion (async).
   9. Verify on-chain: PendingRequest has sender = buyer, facilitator = facilitator address.
-  10. Call `simulateProcessing()` → request completed successfully.
-  11. Buyer claims asset refund via `claim(tokenAddress, buyer)`.
-  12. Facilitator claims ETH fee refund via `claim(address(0), facilitator)`.
-  13. Error case: simulateProcessing with error → buyer gets deposit back, facilitator gets partial fee refund.
 
 **Acceptance**: All tests pass, demonstrating the complete facilitator lifecycle including payload encryption and async settle semantics.
 

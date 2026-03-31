@@ -115,8 +115,7 @@ vela-facilitator/
 │
 ├── mock/                               # Mock infrastructure
 │   ├── anvil.ts                        # Anvil process management (start/stop/health check)
-│   ├── deploy.ts                       # Deploy mock contracts to Anvil, return addresses + instances
-│   └── simulate.ts                     # TEE processing simulation helper
+│   └── deploy.ts                       # Deploy mock contracts to Anvil, return addresses + instances
 │
 ├── test/                               # Integration tests (Vitest)
 │   ├── setup.ts                        # Global setup: Anvil + deploy + start facilitator
