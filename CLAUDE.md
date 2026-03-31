@@ -10,7 +10,7 @@ Gasless request submission service for the Vela blockchain platform. Allows user
 
 ## Status
 
-Planning phase complete. No code implemented yet. See `PLAN.md` for the full 16-task implementation plan (Tasks 0–15).
+Planning phase complete. No code implemented yet. See `PLAN.md` for the full 18-task implementation plan (Tasks 0–17).
 
 ## Architecture
 

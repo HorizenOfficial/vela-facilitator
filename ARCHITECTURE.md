@@ -75,6 +75,43 @@ Following the Coinbase x402 facilitator pattern from `@x402/core`:
 
 The core `/submit` route reuses the scheme's underlying `verify()` + `settle()` logic but with a simpler non-x402 request format. Unlike the x402 scheme (which is specifically designed for the [vela-nova private transfer app](https://github.com/HorizenOfficial/vela-nova), `applicationId = 1`), `/submit` is **application-agnostic** and can forward requests to any app on the chain.
 
+## x402 Client-Side Integration
+
+The `@horizen/x402-private-vela-fixed` package also provides client-side support, following the same symmetric pattern as Coinbase's x402:
+
+```
+@x402/core
+├── x402Facilitator + scheme  →  server: verify/settle
+└── x402Client      + scheme  →  client: sign/pay (intercepts 402, signs, retries)
+```
+
+The client-side scheme handles all vela-nova specific logic:
+1. Receives 402 response with `PaymentRequirements` (including `extra.invoiceId`)
+2. Reads `facilitatorNonces[sender]` from `ProcessorEndpoint` contract
+3. Reads EIP-2612 nonce from the token contract
+4. Builds the vela-nova transfer payload with `invoice_id`
+5. Encrypts payload with TEE's P-521 public key (ECIES via `vela-common-ts`)
+6. Signs EIP-712 request authorization + EIP-2612 permit
+7. Returns the `PaymentPayload` for the x402Client to retry the request
+
+```typescript
+import { x402Client } from '@x402/core/client';
+import { registerPrivateVelaFixedClient } from '@horizen/x402-private-vela-fixed';
+
+const client = new x402Client();
+registerPrivateVelaFixedClient(client, {
+  signerPrivateKey: buyerPrivateKey,       // buyer's EOA key (for EIP-712 + EIP-2612)
+  p521PrivateKey: buyerP521Key,            // buyer's P-521 key (for encryption)
+  teePublicKey: teeP521PublicKey,          // TEE's P-521 public key
+  rpcUrl: 'https://rpc.vela.network',     // for reading nonces from chain
+  contractAddress: processorEndpointAddr,  // ProcessorEndpoint address
+  tokenAddress: usdcAddress,               // ERC-20 token for deposits
+});
+
+// x402Client automatically handles 402 responses
+const response = await client.fetch('https://api.seller.com/resource');
+```
+
 ## Project Structure
 
 ```
@@ -84,13 +121,15 @@ vela-facilitator/
 │   ├── x402-private-vela-fixed/       # @horizen/x402-private-vela-fixed (publishable)
 │   │   ├── src/
 │   │   │   ├── index.ts               # Public exports
-│   │   │   ├── scheme.ts              # PrivateVelaFixedScheme (implements SchemeNetworkFacilitator)
-│   │   │   ├── register.ts            # registerPrivateVelaFixedScheme() helper
+│   │   │   ├── scheme.ts              # PrivateVelaFixedScheme (facilitator: verify/settle)
+│   │   │   ├── register.ts            # registerPrivateVelaFixedScheme() (facilitator)
+│   │   │   ├── client.ts              # registerPrivateVelaFixedClient() (client: sign/pay)
+│   │   │   ├── sign.ts                # Client signing logic (EIP-712 + EIP-2612 + P-521 encrypt)
 │   │   │   ├── types.ts               # RequestAuthorization, DepositPermit, VelaPaymentPayload
 │   │   │   ├── verify.ts              # Off-chain EIP-712 + EIP-2612 signature validation
 │   │   │   └── settle.ts              # On-chain submitRequestFor() call
-│   │   ├── README.md                  # Scheme package docs: interface, types, registration example
-│   │   ├── package.json               # depends on @x402/core, ethers
+│   │   ├── README.md                  # Scheme package docs: facilitator + client usage examples
+│   │   ├── package.json               # depends on @x402/core, ethers, vela-common-ts (P-521)
 │   │   └── tsconfig.json
 │   │
 │   └── contracts/                      # Hardhat project for mock contracts
@@ -127,7 +166,7 @@ vela-facilitator/
 │   │   ├── verify.test.ts              # x402 /verify tests
 │   │   └── settle.test.ts              # x402 /settle tests
 │   └── e2e/
-│       └── full-flow.test.ts           # Full lifecycle: sign → submit → process → claim
+│       └── full-flow.test.ts           # Full lifecycle: core /submit + x402 client→facilitator round-trip
 │
 ├── package.json                        # Root (facilitator service deps + workspace config)
 ├── pnpm-workspace.yaml                 # Workspace: packages/*
