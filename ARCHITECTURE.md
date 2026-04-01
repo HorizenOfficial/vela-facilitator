@@ -282,6 +282,7 @@ vela-facilitator/
 │       └── full-flow.test.ts           # Full lifecycle: core /submit + x402 client→facilitator round-trip
 │
 ├── package.json                        # Root (facilitator service deps + workspace config)
+├── pnpm-workspace.yaml                 # Workspace: packages/*
 └── tsconfig.json
 ```
 
@@ -316,7 +317,7 @@ Note: The token address is **not** a configuration parameter — it comes from t
 | HTTP framework | Express.js | Simple, widely used |
 | Testing | Vitest | Fast, TypeScript-native |
 | Ethereum library | ethers.js v6 | Matches vela-common-ts |
-| Package manager | npm workspaces | Built-in monorepo support, no extra tooling needed |
+| Package manager | pnpm workspaces | Standard for monorepos, good for local package linking |
 
 ## Mock Infrastructure
 
@@ -329,9 +330,9 @@ Since the real contract changes (submitRequestFor, ERC-20 support) are not yet i
 
 After all tasks are complete:
 ```bash
-npm install                                              # Dependencies
-npm run build -w packages/contracts                      # Contracts compile
-npm run build -w packages/x402-private-vela-fixed        # Scheme package builds
-npm test                                                 # All integration + e2e tests pass
-npm run dev                                              # Service starts, curl /supported works
+pnpm install                                              # Dependencies
+pnpm --filter @vela-facilitator/contracts run compile     # Contracts compile
+pnpm --filter @horizen/x402-private-vela-fixed run build  # Scheme package builds
+pnpm test                                                 # All integration + e2e tests pass
+pnpm dev                                                  # Service starts, curl /supported works
 ```

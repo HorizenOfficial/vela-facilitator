@@ -74,15 +74,16 @@ vela-facilitator/
 ### Prerequisites
 
 - Node.js 20+
+- [pnpm](https://pnpm.io/) 9+
 - [Foundry](https://getfoundry.sh/) (`anvil`) for running tests
 
 ### Install and build
 
 ```bash
-npm install
-npm run build -w packages/contracts          # compile Solidity mock contracts
-npm run build -w packages/x402-private-vela-fixed  # compile scheme package
-npm run build                                # compile facilitator server
+pnpm install
+pnpm --filter @vela-facilitator/contracts run compile  # compile Solidity mock contracts
+pnpm --filter @horizen/x402-private-vela-fixed build  # compile scheme package
+pnpm build  # compile facilitator server
 ```
 
 ### Run in development
@@ -93,7 +94,7 @@ RPC_URL=http://127.0.0.1:8545 \
 FACILITATOR_PRIVATE_KEY=0x... \
 PROCESSOR_ENDPOINT_ADDRESS=0x... \
 CHAIN_ID=2651420 \
-npm run dev
+pnpm dev
 ```
 
 ### Run tests
@@ -101,7 +102,7 @@ npm run dev
 Tests start a local Anvil node, deploy mock contracts, and run the full facilitator stack.
 
 ```bash
-npm test
+pnpm test
 ```
 
 ## Configuration
