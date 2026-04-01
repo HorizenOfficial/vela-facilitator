@@ -37,6 +37,10 @@ Mock infrastructure (`mock/`) manages Anvil lifecycle and contract deployment.
 - Anvil (local Ethereum node for testing)
 - pnpm workspaces
 
+## Coding Conventions
+
+- Use **exact version numbers** in `package.json` dependencies (e.g., `"1.2.3"`, not `"^1.2.3"`).
+
 ## Related Local Repos
 
 See `CLAUDE.local.md` (if any) for local path mappings. Key references:

@@ -32,48 +32,67 @@ The on-chain submission is a strong guarantee: signatures are valid, nonce is co
 
 ## Architecture Diagram
 
-Following the Coinbase x402 facilitator pattern from `@x402/core`:
+The diagram below shows the full x402 flow with all three components using the `private-vela-fixed` scheme from `@horizen/x402-private-vela-fixed`, plus the core `/submit` route for non-x402 usage.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  vela-facilitator (Express server)                          │
-│                                                             │
-│  ┌───────────────────────┐   ┌────────────────────────────┐ │
-│  │ Core routes            │   │ x402 routes               │ │
-│  │  POST /submit          │   │  POST /verify             │ │
-│  │                        │   │  POST /settle             │ │
-│  │                        │   │  GET  /supported           │ │
-│  └──────────┬─────────────┘   └────────────┬──────────────┘ │
-│             │                              │                │
-│             │    ┌─────────────────────┐   │                │
-│             │    │  x402Facilitator    │   │                │
-│             │    │  (from @x402/core)  │◄──┘                │
-│             │    │                     │                    │
-│             │    │  .register(network, │                    │
-│             │    │    scheme)          │                    │
-│             │    └─────────┬──────────┘                    │
-│             │              │                               │
-│             ▼              ▼                                │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │  @horizen/x402-private-vela-fixed                    │  │
-│  │  (separate publishable package)                      │  │
-│  │                                                      │  │
-│  │  PrivateVelaFixedScheme implements                   │  │
-│  │    SchemeNetworkFacilitator {                         │  │
-│  │      scheme = "private-vela-fixed"                   │  │
-│  │      verify(payload, requirements) → VerifyResponse  │  │
-│  │      settle(payload, requirements) → SettleResponse  │  │
-│  │  }  (uses EIP-2612 permit, not EIP-3009)             │  │
-│  │                                                      │  │
-│  │  registerPrivateVelaFixedScheme(facilitator, config) │  │
-│  └──────────────────────────────────────────────────────┘  │
-│             │                                               │
-│             ▼                                               │
-│  ┌──────────────────────────────┐                          │
-│  │  ProcessorEndpoint contract  │                          │
-│  │  (on-chain via ethers.js)    │                          │
-│  └──────────────────────────────┘                          │
-└─────────────────────────────────────────────────────────────┘
+  Any client                        ┌──────────────────────────────────┐
+  (SDK, CLI, bot)                   │  Buyer (x402Client)              │
+      │                             │                                  │
+      │                             │  registerPrivateVelaFixedClient  │
+      │                             │  ─ EIP-712 + EIP-2612 signing   │
+      │                             │  ─ P-521 payload encryption     │
+      │                             │  ─ reads nonces from chain      │
+      │                             └──────────┬───────────────────────┘
+      │                                        │
+      │                                        │ 1. GET /resource
+      │                                        ▼
+      │                             ┌──────────────────────────────────┐
+      │                             │  Seller (x402ResourceServer)     │
+      │                             │                                  │
+      │                             │  registerPrivateVelaFixedServer  │
+      │                             │  ─ returns 402 + Payment-        │
+      │                             │    Requirements {invoiceId}      │
+      │                             │  ─ calls facilitator on retry    │
+      │                             └──────────┬───────────────────────┘
+      │                                        │                  ▲
+      │                                        │ 2. /verify       │ 5. {requestId,
+      │                                        │    /settle       │     txHash}
+      │                                        ▼                  │
+┌─────┼───────────────────────────────────────────────────────────────────┐
+│     │                                                                   │
+│  vela-facilitator (Express service)                                     │
+│     │                                                                   │
+│     │                      ┌────────────────────────────┐               │
+│     │                      │ x402 routes                │               │
+│     │                      │  POST /verify              │               │
+│     │                      │  POST /settle              │               │
+│     ▼                      │  GET  /supported            │               │
+│  ┌───────────────────┐     └────────────┬───────────────┘               │
+│  │ Core routes        │                  │                              │
+│  │  POST /submit      │    ┌─────────────────────┐                     │
+│  │  (app-agnostic)    │    │  x402Facilitator    │                     │
+│  └────────┬───────────┘    │  (from @x402/core)  │                     │
+│           │                └─────────┬──────────┘                      │
+│           │                          │                                 │
+│           │                          ▼                                 │
+│           │      ┌──────────────────────────────────────┐             │
+│           │      │  @horizen/x402-private-vela-fixed    │             │
+│           │      │                                      │             │
+│           │      │  registerPrivateVelaFixedScheme      │             │
+│           │      │  ─ verify: EIP-712 + EIP-2612        │             │
+│           │      │    off-chain validation               │             │
+│           │      │  ─ settle: submitRequestFor()        │             │
+│           │      │    on-chain                           │             │
+│           │      └──────────────┬───────────────────────┘             │
+│           │                     │                                     │
+│           │  direct call        │ via scheme                          │
+│           ▼                     ▼                                     │
+│  ┌──────────────────────────────────────┐                             │
+│  │  ProcessorEndpoint contract          │  verify sigs, consume nonce,│
+│  │  submitRequestFor()                  │  permit+transferFrom,       │
+│  │  (on-chain via ethers.js)            │  create PendingRequest      │
+│  └──────────────────────────────────────┘                             │
+└───────────────────────────────────────────────────────────────────────┘
 ```
 
 The core `/submit` route reuses the scheme's underlying `verify()` + `settle()` logic but with a simpler non-x402 request format. Unlike the x402 scheme (which is specifically designed for the [vela-nova private transfer app](https://github.com/HorizenOfficial/vela-nova)), `/submit` is **application-agnostic** and can forward requests to any app on the chain.

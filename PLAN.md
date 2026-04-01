@@ -214,7 +214,7 @@
 - `/src/routes/submit.ts` — `POST /submit`:
   - Accepts: `{ sender, protocolVersion, applicationId, requestType, payload, tokenAddress, assetAmount, deadline, requestSignature, depositPermit }` (no nonce param — contract reads it from chain)
   - Only allows `ASSOCIATEKEY` and `PROCESS` request types
-  - Wraps into x402 PaymentPayload format internally, delegates to scheme's settle logic
+  - Calls `submitRequestFor()` directly on the contract (does NOT go through the x402 scheme)
   - Returns: `{ requestId, txHash }`
 **Acceptance**: Endpoint responds correctly (tested in Task 15).
 
@@ -301,7 +301,7 @@
 
 Note: `invoiceId` in `PaymentRequirements.extra` is for the seller's tracking only — the facilitator cannot verify it because the payload is encrypted. The seller checks the `invoice_id` in the TEE event after processing.
 
-Note: in a real deployment, both buyer and seller must have previously registered P-521 keys (`ASSOCIATEKEY`) and the buyer must have deposited funds into vela-nova's privacy layer before transfers can succeed. These are vela-nova app-level prerequisites — the mock contract does not enforce them. The resource server (seller) is also **not** tested here.
+Note: in a real deployment, both buyer and seller must have previously registered P-521 keys (`ASSOCIATEKEY`) and the buyer must have deposited funds into vela-nova's privacy layer before transfers can succeed. These are vela-nova app-level prerequisites — the mock contract does not enforce them.
 
 ---
 
