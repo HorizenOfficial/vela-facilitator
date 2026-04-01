@@ -221,6 +221,7 @@
 ---
 
 ## Task 14: Test Setup + Helpers
+**Status: DONE**
 **Scope**: Shared test infrastructure: Anvil lifecycle, contract deployment, user signing helpers.
 **Dependencies**: Task 4, Task 5
 **Files**:
@@ -239,6 +240,7 @@
 ---
 
 ## Task 15: Core Integration Tests
+**Status: DONE**
 **Scope**: Tests for POST /submit.
 **Dependencies**: Task 13, Task 14
 **Files**:
@@ -256,6 +258,7 @@
 ---
 
 ## Task 16: x402 Integration Tests
+**Status: DONE**
 **Scope**: Tests for POST /verify, POST /settle, GET /supported.
 **Dependencies**: Task 12, Task 14
 **Files**:
@@ -273,6 +276,7 @@
 ---
 
 ## Task 17: End-to-End Flow Test
+**Status: DONE**
 **Scope**: Full lifecycle test covering the complete facilitator flow, including vela-nova specific flows with invoiceId. The x402 flow uses a real `x402Client` + `x402ResourceServer` with our scheme registered, testing the full client→resource server→facilitator round-trip.
 **Dependencies**: Task 10, Task 11, Task 15, Task 16
 **Files**:
@@ -306,6 +310,7 @@ Note: in a real deployment, both buyer and seller must have previously registere
 ---
 
 ## Task 18: Documentation (README files)
+**Status: DONE**
 **Scope**: Three README.md files documenting the project.
 **Dependencies**: Task 13 (routes finalized), Task 10 (client finalized), Task 11 (server finalized)
 **Files**:
