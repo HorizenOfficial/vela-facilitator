@@ -9,7 +9,7 @@ import {
   REQUEST_AUTHORIZATION_TYPEHASH,
   VelaPaymentPayload,
   VelaSchemeConfig,
-} from "./types";
+} from "./types.js";
 
 /**
  * Off-chain verification of a VelaPaymentPayload.

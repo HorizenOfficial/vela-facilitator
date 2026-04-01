@@ -2,7 +2,7 @@ import type { SchemeNetworkServer } from "@x402/core/types";
 import type { PaymentRequirements } from "@x402/core/types";
 import type { Network, AssetAmount, Price } from "@x402/core/types";
 import { x402ResourceServer } from "@x402/core/server";
-import { SCHEME_NAME } from "./scheme";
+import { SCHEME_NAME } from "./scheme.js";
 
 export interface VelaServerConfig {
   network: string;

@@ -1,8 +1,8 @@
 import { ethers } from "ethers";
 import type { SettleResponse } from "@x402/core/types";
 import type { PaymentPayload, PaymentRequirements } from "@x402/core/types";
-import { verifyPayment } from "./verify";
-import { VelaPaymentPayload, VelaSchemeConfig } from "./types";
+import { verifyPayment } from "./verify.js";
+import { VelaPaymentPayload, VelaSchemeConfig } from "./types.js";
 
 // Minimal ABI for submitRequestFor
 const PROCESSOR_ENDPOINT_ABI = [

@@ -2,6 +2,7 @@
   "name": "@horizen/x402-private-vela-fixed",
   "version": "0.0.1",
   "description": "x402 private-vela-fixed scheme for facilitator, client, and resource server",
+  "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
@@ -9,7 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@horizen/vela-common-ts": "0.0.27",
+    "@horizen/vela-common-ts": "0.0.28",
     "@x402/core": "2.8.0",
     "ethers": "6.13.4"
   },

@@ -8,7 +8,7 @@ import {
   VelaPaymentPayload,
   VelaPaymentRequirementsExtra,
   PayloadInstructions,
-} from "./types";
+} from "./types.js";
 
 // ABI fragments for on-chain reads
 const ENDPOINT_ABI = [

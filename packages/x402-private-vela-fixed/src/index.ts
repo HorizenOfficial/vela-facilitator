@@ -1,14 +1,14 @@
 // Types
-export * from "./types";
+export * from "./types.js";
 
 // Scheme + facilitator registration
-export { PrivateVelaFixedScheme, SCHEME_NAME } from "./scheme";
-export { registerPrivateVelaFixedScheme } from "./register";
+export { PrivateVelaFixedScheme, SCHEME_NAME } from "./scheme.js";
+export { registerPrivateVelaFixedScheme } from "./register.js";
 
 // Verify / settle (also usable standalone)
-export { verifyPayment } from "./verify";
-export { settlePayment } from "./settle";
+export { verifyPayment } from "./verify.js";
+export { settlePayment } from "./settle.js";
 
 // Client + server (added in Tasks 10 & 11)
-export { registerPrivateVelaFixedClient } from "./client";
-export { registerPrivateVelaFixedServer } from "./server";
+export { registerPrivateVelaFixedClient } from "./client.js";
+export { registerPrivateVelaFixedServer } from "./server.js";

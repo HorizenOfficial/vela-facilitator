@@ -1,8 +1,8 @@
 import type { SchemeNetworkClient, PaymentPayloadResult, PaymentPayloadContext } from "@x402/core/types";
 import type { PaymentRequirements } from "@x402/core/types";
 import { x402Client } from "@x402/core/client";
-import { signPayment, VelaClientConfig } from "./sign";
-import { SCHEME_NAME } from "./scheme";
+import { signPayment, VelaClientConfig } from "./sign.js";
+import { SCHEME_NAME } from "./scheme.js";
 
 export type { VelaClientConfig };
 

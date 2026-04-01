@@ -3,9 +3,9 @@ import type { VerifyResponse, SettleResponse } from "@x402/core/types";
 import type { PaymentPayload, PaymentRequirements } from "@x402/core/types";
 import type { Network } from "@x402/core/types";
 import { ethers } from "ethers";
-import { verifyPayment } from "./verify";
-import { settlePayment } from "./settle";
-import { VelaSchemeConfig } from "./types";
+import { verifyPayment } from "./verify.js";
+import { settlePayment } from "./settle.js";
+import { VelaSchemeConfig } from "./types.js";
 
 export const SCHEME_NAME = "private-vela-fixed" as const;
 

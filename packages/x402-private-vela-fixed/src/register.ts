@@ -1,6 +1,6 @@
 import { x402Facilitator } from "@x402/core/facilitator";
-import { PrivateVelaFixedScheme } from "./scheme";
-import { VelaSchemeConfig } from "./types";
+import { PrivateVelaFixedScheme } from "./scheme.js";
+import { VelaSchemeConfig } from "./types.js";
 
 /**
  * Register the private-vela-fixed scheme on an x402Facilitator.
