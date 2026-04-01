@@ -48,7 +48,7 @@
 **Dependencies**: Task 1, Task 2
 **Key functions**:
 - `submitRequest()` — existing direct path (ETH-only, simplified)
-- `submitRequestFor(sender, ...)` — facilitator path: verify request type is supported (ASSOCIATEKEY or PROCESS only), verify deadline, read nonce from `facilitatorNonces[sender]` (nonce is NOT a calldata parameter), build EIP-712 hash, recover user from sig, verify recovered == sender, consume nonce, execute EIP-2612 permit + transferFrom, create PendingRequest(sender=user, facilitator=msg.sender), emit event. `depositPermit` param is `abi.encode(uint8 v, bytes32 r, bytes32 s)`.
+- `submitRequestFor(sender, ...)` — facilitator path: verify request type is supported (ASSOCIATEKEY or PROCESS only), verify deadline, read nonce from `facilitatorNonces[sender]` (nonce is NOT a calldata parameter), build EIP-712 hash, recover user from sig, verify recovered == sender, consume nonce, handle ERC-20 deposit (check current allowance first — if already `>= assetAmount`, skip `permit` and go directly to `transferFrom`; otherwise call `permit` then `transferFrom`), create PendingRequest(sender=user, facilitator=msg.sender), emit event. `depositPermit` param is `abi.encode(uint8 v, bytes32 r, bytes32 s)`.
 - `facilitatorNonces` mapping + `getFacilitatorNonce(address)`
 - `addAllowedToken(tokenAddress)` — simplified global token allowlist (no per-app allowlists)
 - EIP-712 domain separator (name: "Vela") + REQUEST_AUTHORIZATION_TYPEHASH (includes `sender` field)
