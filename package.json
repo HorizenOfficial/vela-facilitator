@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Gasless request submission service for the Vela blockchain platform",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc",
@@ -11,14 +14,13 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@horizen/x402-private-vela-fixed": "workspace:*",
+    "@horizen/x402-private-vela-fixed": "*",
     "@x402/core": "2.8.0",
     "ethers": "6.13.4",
     "express": "4.21.2",
     "cors": "2.8.5"
   },
   "devDependencies": {
-    "@horizen/vela-common-ts": "link:/zendrive/vela/vela-common-ts",
     "@types/cors": "2.8.17",
     "@types/express": "4.17.21",
     "@types/node": "22.13.4",

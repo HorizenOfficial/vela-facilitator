@@ -34,6 +34,9 @@ mock/*.js.map
 mock/*.d.ts
 mock/*.d.ts.map
 
+# npm lock file (generated, not committed — use npm install to regenerate)
+package-lock.json
+
 # Vitest / Vite cache
 .vitest-cache/
 node_modules/.vite/
