@@ -4,20 +4,23 @@
 
 The vela-facilitator is a platform-level TypeScript service that submits Vela blockchain requests on behalf of users who don't hold ETH (gasless submission). Defined in [FACILITATOR.md](https://github.com/HorizenOfficial/vela/blob/main/docs/design/FACILITATOR.md) section 5.3, it has two layers:
 
-1. **Core facilitation** — POST /submit (generic, non-x402). Can submit requests to **any application** on the Vela chain. Nonce queries are done directly on-chain by clients.
-2. **x402 scheme** — POST /verify, POST /settle, GET /supported (standard Coinbase x402 protocol). Specifically targets the [**vela-nova private transfer app**](https://github.com/HorizenOfficial/vela-nova) (`applicationId = 1`) for private ERC-20 transfers.
+1. **Core facilitation** — POST /submit (generic, non-x402). Can submit requests to **any application** on the Vela chain. 
+2. **x402 scheme** — POST /verify, POST /settle, GET /supported (standard Coinbase x402 protocol). Specifically targets the x402 payment standard by defining a custom payment scheme and endpoints compatible with the standrd. This part assumes a specific Vela app is used for the transfers [**vela-nova private transfer app**](https://github.com/HorizenOfficial/vela-nova).
 
-The design uses EIP-2612 (`permit`) for deposit authorization and EIP-712 for request authorization. Only `ASSOCIATEKEY` and `PROCESS` request types are supported via `submitRequestFor`. The nonce is not passed as a calldata parameter — the contract reads it from `facilitatorNonces[sender]` directly.
+The design uses EIP-2612 (`permit`) for deposit authorization and EIP-712 for request authorization. 
+Only `ASSOCIATEKEY` and `PROCESS` request types are supported.
 
 ## vela-nova App Integration (x402 scheme)
 
-The `private-vela-fixed` x402 scheme is designed around the [vela-nova private transfer app](https://github.com/HorizenOfficial/vela-starterkit/blob/main/docs/2_private-transfer-app.md). In the x402 flow:
+The `private-vela-fixed` x402 scheme is designed around the [vela-nova app](https://github.com/HorizenOfficial/vela-nova). 
+For reference: a description of the vela-nova app logic is also provided [here](https://github.com/HorizenOfficial/vela-starterkit/blob/main/docs/2_private-transfer-app.md).
+In the x402 flow:
 
 **App-level prerequisites (not enforced by the facilitator):** 
 - both buyer and seller must have previously registered their P-521 encryption keys via `ASSOCIATEKEY` requests, and the buyer must have deposited funds into vela-nova's privacy layer. These are vela-nova requirements for the encrypted event system and private balances — the facilitator is agnostic to them.
 - The PROCESS request payload is a JSON transfer instruction: `{ type: "transfer", transfer: { to, amount, invoice_id } }`, **encrypted** with the TEE's P-521 public key before submission. The client (buyer) must have a P-521 key pair and know the TEE's public key (retrieved via `MockTeeAuthenticator.getPubSecp521r1()`) to encrypt payloads. Encryption uses ECIES via [`vela-common-ts`](https://github.com/HorizenOfficial/vela-common-ts). The facilitator receives the already-encrypted payload and forwards it to the contract as-is.
 - **`invoiceId`** (max 100 chars) is included in `PaymentRequirements.extra.invoiceId` so the seller can correlate the settlement with the original HTTP request. The seller sets it in the 402 response, and the client is expected to include it in the vela-nova transfer payload as `invoice_id`. After TEE processing, both parties receive encrypted events containing the `invoice_id`. The x402 standard has no native invoiceId field, but `PaymentRequirements.extra` is scheme-specific and extensible — our scheme uses `extra.invoiceId` for this purpose.
-- **The facilitator cannot verify `invoiceId`** — the payload is encrypted with the TEE's P-521 key, so the facilitator cannot read its contents. The match between `extra.invoiceId` and the payload's `invoice_id` is the **seller's responsibility**: after TEE processing, the seller checks the event's `invoice_id` against the one it originally set in the PaymentRequirements.
+- **The facilitator cannot verify `invoiceId`** to enforce it is present — the payload is encrypted with the TEE's P-521 key, so the facilitator cannot read its contents. The match between `extra.invoiceId` and the payload's `invoice_id` is the **seller's responsibility**: after TEE processing, the seller checks the event's `invoice_id` against the one it originally set in the PaymentRequirements.
 
 ## Settle Semantics: Submission, Not Completion
 
@@ -73,7 +76,7 @@ Following the Coinbase x402 facilitator pattern from `@x402/core`:
 └─────────────────────────────────────────────────────────────┘
 ```
 
-The core `/submit` route reuses the scheme's underlying `verify()` + `settle()` logic but with a simpler non-x402 request format. Unlike the x402 scheme (which is specifically designed for the [vela-nova private transfer app](https://github.com/HorizenOfficial/vela-nova), `applicationId = 1`), `/submit` is **application-agnostic** and can forward requests to any app on the chain.
+The core `/submit` route reuses the scheme's underlying `verify()` + `settle()` logic but with a simpler non-x402 request format. Unlike the x402 scheme (which is specifically designed for the [vela-nova private transfer app](https://github.com/HorizenOfficial/vela-nova)), `/submit` is **application-agnostic** and can forward requests to any app on the chain.
 
 ## x402 Scheme Pattern
 
@@ -107,7 +110,7 @@ interface SchemeNetworkFacilitator {
 }
 ```
 
-Setup:
+Setup and needed parameters:
 
 ```typescript
 import { x402Facilitator } from '@x402/core/facilitator';
@@ -190,10 +193,10 @@ import { registerPrivateVelaFixedClient } from '@horizen/x402-private-vela-fixed
 
 const client = new x402Client();
 registerPrivateVelaFixedClient(client, {
-  signer: buyerSigner,                    // ethers.Signer (for EIP-712 + EIP-2612)
+  signer: buyerSigner,                     // ethers.Signer (for EIP-712 + EIP-2612)
   p521PrivateKey: buyerP521Key,            // buyer's P-521 key (for payload encryption, not Ethereum)
   teePublicKey: teeP521PublicKey,          // TEE's P-521 public key
-  rpcUrl: 'https://rpc.vela.network',     // for reading nonces from chain
+  rpcUrl: 'https://rpc.vela.network',      // for reading nonces from chain
   contractAddress: processorEndpointAddr,  // ProcessorEndpoint address
   tokenAddress: usdcAddress,               // ERC-20 token for deposits
 });
@@ -270,15 +273,15 @@ The facilitator is configured via environment variables:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
+| `CHAIN_ID` | Chain ID (for EIP-712 domain and CAIP-2 network derivation) | `2651420` |
 | `RPC_URL` | Vela chain RPC endpoint | `https://rpc.vela.network` |
 | `FACILITATOR_PRIVATE_KEY` | EOA private key (used to create an ethers.Signer; pays gas + maxFeeValue) | `0xac0974...` |
 | `PROCESSOR_ENDPOINT_ADDRESS` | ProcessorEndpoint contract address | `0x5FbDB2...` |
-| `CHAIN_ID` | Chain ID (for EIP-712 domain and CAIP-2 network derivation) | `2651420` |
 | `MAX_FEE_VALUE` | ETH in wei sent as `msg.value` for service fees | `1000000000000000` |
 | `VELA_NOVA_APPLICATION_ID` | Application ID of the vela-nova private transfer app (used by x402 scheme) | `1` |
 | `PORT` | HTTP server port | `3000` |
 
-The token address is **not** a configuration parameter — it comes from the client payload (`/submit`) or from `PaymentRequirements.asset` (x402 flow, set by the seller in the 402 response). The contract validates it against `globalAllowedTokens` on-chain.
+Note: The token address is **not** a configuration parameter — it comes from the client payload (`/submit`) or from `PaymentRequirements.asset` (x402 flow, set by the seller in the 402 response). The contract validates it against `globalAllowedTokens` on-chain.
 
 ## Key Technical Decisions
 
@@ -287,7 +290,7 @@ The token address is **not** a configuration parameter — it comes from the cli
 | x402 integration | Use `@x402/core` `x402Facilitator` + custom scheme | Follows Coinbase pattern; uses EIP-2612 instead of EIP-3009, so own verify/settle logic needed |
 | Scheme package | Separate `@horizen/x402-private-vela-fixed` in monorepo | Publishable independently; custom verify/settle via `submitRequestFor()` |
 | Deposit authorization | EIP-2612 (`permit`) | More widely adopted than EIP-3009; sequential nonces; sufficient security for our use case |
-| x402 target app | [vela-nova](https://github.com/HorizenOfficial/vela-nova) (`applicationId = 1`) | x402 scheme specifically targets private transfers; `/submit` remains app-agnostic |
+| x402 target app | [vela-nova](https://github.com/HorizenOfficial/vela-nova) | x402 scheme specifically targets private transfers; `/submit` remains app-agnostic |
 | invoiceId | `PaymentRequirements.extra.invoiceId` + vela-nova `invoice_id` field | x402 has no native invoiceId; `extra` is scheme-extensible; facilitator cannot verify it (payload is encrypted) — seller checks the match via TEE events; vela-nova supports `invoice_id` (max 100 chars) |
 | Mock contract | Standalone (not extending ProcessorEndpoint) | ERC-20 prerequisite changes don't exist yet; cleaner self-contained mock |
 | Local chain | Anvil (`anvil` CLI from Foundry) | Standard, fast, deterministic accounts |
