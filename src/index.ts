@@ -33,7 +33,7 @@ async function main() {
   // x402 routes
   app.use("/", createX402Router(facilitator));
 
-  // Core submit route
+  // Generic submit route
   app.use("/", createSubmitRouter(config, signer));
 
   // Error handler

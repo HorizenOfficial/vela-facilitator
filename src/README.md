@@ -1,4 +1,24 @@
-# vela-facilitator API Reference
+# vela-facilitator
+
+Gasless request submission service for the Vela blockchain platform. Accepts signed EIP-712 requests from clients and submits them on-chain via `submitRequestFor()` on the `ProcessorEndpoint` contract, covering gas on their behalf. Also implements the `private-vela-fixed` x402 payment scheme for the [vela-nova](https://github.com/HorizenOfficial/vela-nova) private transfer app.
+
+---
+
+# Configuration
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `RPC_URL` | yes | — | Ethereum JSON-RPC endpoint |
+| `FACILITATOR_PRIVATE_KEY` | yes | — | Private key of the facilitator wallet (pays gas) |
+| `PROCESSOR_ENDPOINT_ADDRESS` | yes | — | Address of the `ProcessorEndpoint` contract |
+| `CHAIN_ID` | yes | — | EVM chain ID (e.g. `2651420`) |
+| `PORT` | no | `3000` | HTTP server port |
+| `MAX_FEE_VALUE` | no | `50` | Maximum fee the facilitator pays per request (in base units) |
+| `VELA_NOVA_APPLICATION_ID` | no | `1` | Application ID forwarded in x402 settle calls |
+
+---
+
+# API Reference
 
 Base URL: `http://<host>:<PORT>` (default port: `3000`)
 

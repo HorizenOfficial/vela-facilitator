@@ -28,7 +28,7 @@ export function loadConfig(): Config {
   const privateKey = requireEnv("FACILITATOR_PRIVATE_KEY");
   const contractAddress = requireEnv("PROCESSOR_ENDPOINT_ADDRESS");
   const chainId = parseInt(requireEnv("CHAIN_ID"), 10);
-  const maxFeeValue = BigInt(getEnv("MAX_FEE_VALUE", "0"));
+  const maxFeeValue = BigInt(getEnv("MAX_FEE_VALUE", "50"));
   const applicationId = BigInt(getEnv("VELA_NOVA_APPLICATION_ID", "1"));
   const port = parseInt(getEnv("PORT", "3000"), 10);
 

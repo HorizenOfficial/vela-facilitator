@@ -47,7 +47,6 @@ class PrivateVelaFixedClientScheme implements SchemeNetworkClient {
  *   teePublicKey: teeP521PublicKey,
  *   rpcUrl: "https://rpc.vela.network",
  *   contractAddress: processorEndpointAddr,
- *   tokenAddress: usdcAddress,
  * });
  * ```
  */

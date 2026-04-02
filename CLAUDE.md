@@ -5,12 +5,7 @@
 Gasless request submission service for the Vela blockchain platform. Allows users to submit requests without holding ETH by delegating gas and fee payments to a facilitator.
 
 - **Design doc (Vela side)**: [`FACILITATOR.md`](https://github.com/HorizenOfficial/vela/blob/main/docs/design/FACILITATOR.md) (section 5.3 for this service)
-- **Architecture**: `ARCHITECTURE.md` — project structure, diagrams, technical decisions
-- **Implementation plan**: `PLAN.md` — task list (temporary, will be removed after implementation)
-
-## Status
-
-Planning phase complete. No code implemented yet. See `PLAN.md` for the full 19-task implementation plan (Tasks 0–18).
+- **Architecture**: `docs/design/ARCHITECTURE.md` — project structure, diagrams, technical decisions
 
 ## Architecture
 
@@ -59,6 +54,6 @@ See `CLAUDE.local.md` (if any) for local path mappings. Key references:
 - Only `ASSOCIATEKEY` and `PROCESS` request types are supported via `submitRequestFor`. Other request types are rejected.
 - The x402 scheme targets [vela-nova](https://github.com/HorizenOfficial/vela-nova) private transfers. `applicationId` is configurable (env var `VELA_NOVA_APPLICATION_ID`), `requestType = PROCESS` is hardcoded. Both buyer and seller must have registered P-521 keys (`ASSOCIATEKEY`) before transfers — this is a vela-nova app-level prerequisite, not enforced by the facilitator.
 - The seller tracks payments via `invoiceId` in `PaymentRequirements.extra`. The facilitator **cannot** verify invoiceId (payload is encrypted) — the seller checks the match via TEE events after processing.
-- Settle is **asynchronous**: a successful `/settle` means on-chain submission, not TEE completion. The seller waits for the vela-nova encrypted event to confirm the transfer.
+- **Settle is asynchronous**: a successful `/settle` means on-chain submission, not TEE completion. The seller waits for the vela-nova encrypted event to confirm the transfer.
 - Config accepts `ethers.Signer` (not raw private keys) for Ethereum operations, following Coinbase's pattern. P-521 keys remain raw (ECIES encryption, not Ethereum).
-- See [private transfer app docs](https://github.com/HorizenOfficial/vela-starterkit/blob/main/docs/2_private-transfer-app.md) for vela-nova details.
+- See [private transfer app docs in the starter kit](https://github.com/HorizenOfficial/vela-starterkit/blob/main/docs/2_private-transfer-app.md) for further details on vela-nova.

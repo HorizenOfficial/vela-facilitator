@@ -71,7 +71,6 @@ registerPrivateVelaFixedClient(client, {
   teePublicKey: teeP521Key,      // TEE's P-521 CryptoKey (from ProcessorEndpoint.getPubSecp521r1())
   rpcUrl: "https://rpc.vela.network",
   contractAddress: "0x<ProcessorEndpoint address>",
-  tokenAddress: "0x<ERC-20 token address>",
   network: "eip155:2651420",
 });
 
@@ -96,7 +95,6 @@ When the resource server returns a `402 Payment Required`, the client:
 | `teePublicKey` | `CryptoKey` | TEE's P-521 ECDH public key |
 | `rpcUrl` | `string` | Ethereum JSON-RPC URL |
 | `contractAddress` | `string` | `ProcessorEndpoint` contract address |
-| `tokenAddress` | `string` | ERC-20 token address for deposits |
 | `network` | `string` | CAIP-2 network identifier |
 
 ---
@@ -186,7 +184,7 @@ interface VelaPaymentPayload { sender, requestSignature, depositPermit, requestA
 
 // Payload sent to TEE (encrypted)
 interface PayloadInstructions { type: "transfer"; transfer: TransferInstruction }
-interface TransferInstruction { to, amount, invoice_id }
+interface TransferInstruction { to, amount, invoice_id, asset }
 
 // Config types
 interface VelaSchemeConfig { ... }   // facilitator

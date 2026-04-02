@@ -39,9 +39,9 @@ The diagram below shows the full x402 flow with all three components using the `
   (SDK, CLI, bot)                   │  Buyer (x402Client)              │
       │                             │                                  │
       │                             │  registerPrivateVelaFixedClient  │
-      │                             │  ─ EIP-712 + EIP-2612 signing   │
-      │                             │  ─ P-521 payload encryption     │
-      │                             │  ─ reads nonces from chain      │
+      │                             │  ─ EIP-712 + EIP-2612 signing    │
+      │                             │  ─ P-521 payload encryption      │
+      │                             │  ─ reads nonces from chain       │
       │                             └──────────┬───────────────────────┘
       │                                        │
       │                                        │ 1. GET /resource
@@ -66,33 +66,33 @@ The diagram below shows the full x402 flow with all three components using the `
 │     │                      │ x402 routes                │               │
 │     │                      │  POST /verify              │               │
 │     │                      │  POST /settle              │               │
-│     ▼                      │  GET  /supported            │               │
-│  ┌───────────────────┐     └────────────┬───────────────┘               │
-│  │ Core routes        │                  │                              │
-│  │  POST /submit      │    ┌─────────────────────┐                     │
-│  │  (app-agnostic)    │    │  x402Facilitator    │                     │
-│  └────────┬───────────┘    │  (from @x402/core)  │                     │
-│           │                └─────────┬──────────┘                      │
-│           │                          │                                 │
-│           │                          ▼                                 │
-│           │      ┌──────────────────────────────────────┐             │
-│           │      │  @horizen/x402-private-vela-fixed    │             │
-│           │      │                                      │             │
-│           │      │  registerPrivateVelaFixedScheme      │             │
-│           │      │  ─ verify: EIP-712 + EIP-2612        │             │
-│           │      │    off-chain validation               │             │
-│           │      │  ─ settle: submitRequestFor()        │             │
-│           │      │    on-chain                           │             │
-│           │      └──────────────┬───────────────────────┘             │
-│           │                     │                                     │
-│           │  direct call        │ via scheme                          │
-│           ▼                     ▼                                     │
-│  ┌──────────────────────────────────────┐                             │
-│  │  ProcessorEndpoint contract          │  verify sigs, consume nonce,│
-│  │  submitRequestFor()                  │  permit+transferFrom,       │
-│  │  (on-chain via ethers.js)            │  create PendingRequest      │
-│  └──────────────────────────────────────┘                             │
-└───────────────────────────────────────────────────────────────────────┘
+│     ▼                      │  GET  /supported           │               │
+│  ┌────────────────────┐    └────────────┬───────────────┘               │
+│  │ Core routes        │                 │                               │
+│  │  POST /submit      │    ┌─────────────────────┐                      │
+│  │  (app-agnostic)    │    │  x402Facilitator    │                      │
+│  └────────┬───────────┘    │  (from @x402/core)  │                      │
+│           │                └────────────┬────────┘                      │
+│           │                             │                               │
+│           │                             ▼                               │
+│           │      ┌──────────────────────────────────────┐               │
+│           │      │  @horizen/x402-private-vela-fixed    │               │
+│           │      │                                      │               │
+│           │      │  registerPrivateVelaFixedScheme      │               │
+│           │      │  ─ verify: EIP-712 + EIP-2612        │               │
+│           │      │    off-chain validation              │               │
+│           │      │  ─ settle: submitRequestFor()        │               │
+│           │      │    on-chain                          │               │
+│           │      └──────────────┬───────────────────────┘               │
+│           │                     │                                       │
+│           │  direct call        │ via scheme                            │
+│           ▼                     ▼                                       │
+│  ┌──────────────────────────────────────┐                               │
+│  │  ProcessorEndpoint contract          │  verify sigs, consume nonce,  │
+│  │  submitRequestFor()                  │  permit+transferFrom,         │
+│  │  (on-chain via ethers.js)            │  create PendingRequest        │
+│  └──────────────────────────────────────┘                               │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 The core `/submit` route reuses the scheme's underlying `verify()` + `settle()` logic but with a simpler non-x402 request format. Unlike the x402 scheme (which is specifically designed for the [vela-nova private transfer app](https://github.com/HorizenOfficial/vela-nova)), `/submit` is **application-agnostic** and can forward requests to any app on the chain.
@@ -217,7 +217,6 @@ registerPrivateVelaFixedClient(client, {
   teePublicKey: teeP521PublicKey,          // TEE's P-521 public key
   rpcUrl: 'https://rpc.vela.network',      // for reading nonces from chain
   contractAddress: processorEndpointAddr,  // ProcessorEndpoint address
-  tokenAddress: usdcAddress,               // ERC-20 token for deposits
 });
 
 // x402Client automatically handles 402 responses

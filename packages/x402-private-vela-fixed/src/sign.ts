@@ -27,7 +27,6 @@ export interface VelaClientConfig {
   teePublicKey: CryptoKey;       // TEE's P-521 public key (to encrypt payload for TEE)
   rpcUrl: string;
   contractAddress: string;       // ProcessorEndpoint contract address
-  tokenAddress: string;          // ERC-20 token for deposits
 }
 
 /**
@@ -59,15 +58,17 @@ export async function signPayment(
 
   const deadline = BigInt(Math.floor(Date.now() / 1000) + deadlineSeconds);
   const assetAmount = BigInt(requirements.amount);
-  const tokenAddress = assetAmount > 0n ? config.tokenAddress : ethers.ZeroAddress;
+  const tokenAddress = assetAmount > 0n ? requirements.asset : ethers.ZeroAddress;
 
   // 2. Build vela-nova transfer payload
+  // TODO: "asset" field to be confirmed after ERC-20 support addition on vela and vela-nove
   const payloadInstructions: PayloadInstructions = {
     type: "transfer",
     transfer: {
       to: requirements.payTo,
       amount: requirements.amount,
       invoice_id: invoiceId,
+      asset: requirements.asset
     },
   };
 

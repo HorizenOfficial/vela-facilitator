@@ -101,6 +101,7 @@ export interface TransferInstruction {
   to: string;       // recipient address
   amount: string;   // amount in token units (string to avoid BigInt serialization issues)
   invoice_id: string; // max 100 chars, correlates payment to seller's invoice
+  asset: string; // token ID of the asset to move (NOTE: this is not present currently on Nova! will be added after ERC-20 support)
 }
 
 /**
