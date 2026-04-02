@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { encrypt } from "@horizen/vela-common-ts";
 import type { PaymentPayload, PaymentRequirements } from "@x402/core/types";
 import {
   REQUEST_TYPE_PROCESS,
@@ -73,7 +74,6 @@ export async function signPayment(
   };
 
   // 3. Encrypt payload with TEE's P-521 public key
-  const { encrypt } = await import("@horizen/vela-common-ts");
   const plaintext = new TextEncoder().encode(JSON.stringify(payloadInstructions));
   const encrypted = await encrypt(config.p521PrivateKey, config.teePublicKey, plaintext);
   const payloadHex = ethers.hexlify(encrypted);

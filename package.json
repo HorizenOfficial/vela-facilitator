@@ -18,6 +18,7 @@
     "cors": "2.8.5"
   },
   "devDependencies": {
+    "@horizen/vela-common-ts": "0.0.30",
     "@types/cors": "2.8.17",
     "@types/express": "4.17.21",
     "@types/node": "22.13.4",

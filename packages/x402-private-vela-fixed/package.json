@@ -10,7 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@horizen/vela-common-ts": "0.0.28",
+    "@horizen/vela-common-ts": "0.0.30",
     "@x402/core": "2.8.0",
     "ethers": "6.13.4"
   },

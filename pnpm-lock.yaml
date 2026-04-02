@@ -24,6 +24,9 @@ importers:
         specifier: 4.21.2
         version: 4.21.2
     devDependencies:
+      '@horizen/vela-common-ts':
+        specifier: 0.0.30
+        version: 0.0.30(ethers@6.13.4)
       '@types/cors':
         specifier: 2.8.17
         version: 2.8.17
@@ -86,8 +89,8 @@ importers:
   packages/x402-private-vela-fixed:
     dependencies:
       '@horizen/vela-common-ts':
-        specifier: 0.0.28
-        version: 0.0.28(ethers@6.13.4)
+        specifier: 0.0.30
+        version: 0.0.30(ethers@6.13.4)
       '@x402/core':
         specifier: 2.8.0
         version: 2.8.0
@@ -520,8 +523,8 @@ packages:
     resolution: {integrity: sha512-vBZP4NlzfOlerQTnba4aqZoMhE/a9HY7HRqoOPaETQcSQuWEIyZMHGfVu6w9wGtGK5fED5qRs2DteVCjOH60sA==}
     engines: {node: '>=14'}
 
-  '@horizen/vela-common-ts@0.0.28':
-    resolution: {integrity: sha512-7RX1QocNI1DkqTdo7gh9m+DM+l7Pxjz0LUoKMPjViG2I3C+k+rwyRqW923/RAv7RUKW3vdhQ5T4WcydE9ZCxMg==}
+  '@horizen/vela-common-ts@0.0.30':
+    resolution: {integrity: sha512-18F0Njj3XM4Ii80lkkRjXh3M5WFHDKBD6Kj7JHyYcFjPmDEwZCMzylxBENOMBzAx97WGWCIlbEmdDm3KMnzIfw==}
     peerDependencies:
       ethers: ^6.0.0
 
@@ -3516,7 +3519,7 @@ snapshots:
 
   '@fastify/busboy@2.1.1': {}
 
-  '@horizen/vela-common-ts@0.0.28(ethers@6.13.4)':
+  '@horizen/vela-common-ts@0.0.30(ethers@6.13.4)':
     dependencies:
       '@noble/curves': 2.0.1
       axios: 1.14.0

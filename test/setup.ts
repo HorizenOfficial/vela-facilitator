@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { generateKeyPair, exportPublicKeyToHex, hexToBytes } from "@horizen/vela-common-ts";
 import type { GlobalSetupContext } from "vitest/node";
 import { startAnvil, stopAnvil, type AnvilInstance } from "../mock/anvil.js";
 import { deployContracts } from "../mock/deploy.js";
@@ -39,8 +40,10 @@ export async function setup({ provide }: GlobalSetupContext) {
   const facilitatorAccount = anvil.accounts[1];
   const userAccounts = anvil.accounts.slice(2, 5);
 
-  // P-521 mock TEE public key: 133 bytes uncompressed (0x04 prefix + 66 bytes x + 66 bytes y)
-  const teePublicKey = new Uint8Array(133).fill(0x04);
+  // Generate a real P-521 TEE key pair
+  const teeKeyPair = await generateKeyPair();
+  const teePublicKeyHex = await exportPublicKeyToHex(teeKeyPair.publicKey);
+  const teePublicKey = hexToBytes(teePublicKeyHex);
 
   // Deploy contracts
   const contracts = await deployContracts(provider, deployerWallet, {
@@ -93,7 +96,7 @@ export async function setup({ provide }: GlobalSetupContext) {
     },
     facilitatorAccount,
     userAccounts,
-    teePublicKeyHex: ethers.hexlify(teePublicKey),
+    teePublicKeyHex,
   };
 
   // Provide fixtures to fork workers via vitest's cross-process IPC

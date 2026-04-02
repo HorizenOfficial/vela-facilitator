@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { encrypt, generateKeyPair, importPublicKeyFromHex } from "@horizen/vela-common-ts";
 import {
   REQUEST_TYPE_PROCESS,
   REQUEST_TYPE_ASSOCIATEKEY,
@@ -11,22 +12,6 @@ import {
   type SupportedRequestType,
   type PayloadInstructions,
 } from "../../packages/x402-private-vela-fixed/src/types.js";
-/**
- * Mock "encryption" for tests.
- * The MockTeeAuthenticator accepts any payload, so we don't need real ECIES here.
- * We prefix the plaintext with a 133-byte fake ephemeral public key header so the
- * format resembles a real encrypted payload (TEE ignores content in mock mode).
- */
-function mockEncrypt(plaintext: Uint8Array): Uint8Array {
-  const fakeEphemeralKey = new Uint8Array(133).fill(0x04);
-  const result = new Uint8Array(133 + 12 + plaintext.length + 16);
-  result.set(fakeEphemeralKey, 0);
-  result.set(new Uint8Array(12), 133);       // fake nonce
-  result.set(plaintext, 133 + 12);            // plaintext as "ciphertext" (mock)
-  result.set(new Uint8Array(16), 133 + 12 + plaintext.length); // fake auth tag
-  return result;
-}
-
 // ABI fragments for on-chain reads
 const ENDPOINT_ABI = [
   "function facilitatorNonces(address) view returns (uint256)",
@@ -213,12 +198,12 @@ export class TestUser {
   }
 
   /**
-   * Encrypt a JSON payload with the TEE's P-521 public key
-   * For tests, we generate a fresh ephemeral key pair for encryption.
+   * Encrypt a JSON payload with the TEE's P-521 public key using real ECIES.
    */
   async encryptPayload(plaintext: Uint8Array): Promise<Uint8Array> {
-    // Use mock encryption - MockTeeAuthenticator accepts any payload in tests
-    return mockEncrypt(plaintext);
+    const buyerKeyPair = await generateKeyPair();
+    const teePublicKey = await importPublicKeyFromHex(this.teePublicKeyHex);
+    return encrypt(buyerKeyPair.privateKey, teePublicKey, plaintext);
   }
 
   /**
@@ -228,6 +213,7 @@ export class TestUser {
     to: string;
     amount: string;
     invoice_id?: string;
+    asset: string;
   }): Promise<Uint8Array> {
     const instructions: PayloadInstructions = {
       type: "transfer",
@@ -235,6 +221,7 @@ export class TestUser {
         to: params.to,
         amount: params.amount,
         invoice_id: params.invoice_id ?? "",
+        asset: params.asset
       },
     };
     const plaintext = new TextEncoder().encode(JSON.stringify(instructions));
@@ -309,6 +296,7 @@ export class TestUser {
       to: req.payTo,
       amount: req.amount,
       invoice_id: invoiceId,
+      asset: tokenAddress
     });
 
     const payloadHex = ethers.hexlify(payloadBytes);
