@@ -75,6 +75,7 @@ describe("Full E2E Flow", () => {
         to: fixtures.userAccounts[2].address,
         amount: "25",
         invoice_id: "E2E-TEST-001",
+        asset: fixtures.contracts.token.address,
       });
 
       const body = await user.buildSubmitPayload({

@@ -47,6 +47,7 @@ describe("POST /submit", () => {
     const payload = await user.buildTransferPayload({
       to: fixtures.userAccounts[1].address,
       amount: "0",
+      asset: ethers.ZeroAddress,
     });
 
     const body = await user.buildSubmitPayload({
@@ -67,6 +68,7 @@ describe("POST /submit", () => {
     const payload = await user.buildTransferPayload({
       to: fixtures.userAccounts[2].address,
       amount: "100",
+      asset: fixtures.contracts.token.address,
     });
 
     const body = await user.buildSubmitPayload({

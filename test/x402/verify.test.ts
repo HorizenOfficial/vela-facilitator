@@ -78,6 +78,7 @@ describe("POST /verify", () => {
     const payload = await user.buildTransferPayload({
       to: requirements.payTo,
       amount: requirements.amount,
+      asset: ethers.ZeroAddress,
     });
     const payloadHex = ethers.hexlify(payload);
     const payloadHash = ethers.keccak256(payload);
@@ -120,6 +121,7 @@ describe("POST /verify", () => {
     const payload = await user.buildTransferPayload({
       to: requirements.payTo,
       amount: requirements.amount,
+      asset: ethers.ZeroAddress,
     });
     const payloadHex = ethers.hexlify(payload);
     const payloadHash = ethers.keccak256(payload);
