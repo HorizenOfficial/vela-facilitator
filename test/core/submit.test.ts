@@ -170,14 +170,14 @@ describe("POST /submit", () => {
     const endpoint = new ethers.Contract(
       fixtures.contracts.processorEndpoint.address,
       [
-        "function requestById(bytes32) view returns (uint256, uint256, uint256, bytes32, bytes, address, address, address, uint256, uint64, uint8, uint8)",
+        "function requestById(bytes32) view returns (uint256, address, uint256, uint256, bytes32, bytes, address, address, uint64, uint8, uint8)",
       ],
       provider
     );
 
     const request = await endpoint.requestById(res.requestId);
-    // sender is at index 5, facilitator is at index 6
-    expect(request[5].toLowerCase()).toBe(user.address.toLowerCase());
-    expect(request[6].toLowerCase()).toBe(fixtures.facilitatorAccount.address.toLowerCase());
+    // sender is at index 6, facilitator is at index 7
+    expect(request[6].toLowerCase()).toBe(user.address.toLowerCase());
+    expect(request[7].toLowerCase()).toBe(fixtures.facilitatorAccount.address.toLowerCase());
   });
 });

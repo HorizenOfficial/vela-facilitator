@@ -246,8 +246,8 @@ vela-facilitator/
 │   │
 │   └── contracts/                      # Hardhat project for mock contracts
 │       ├── contracts/
-│       │   ├── Structs.sol             # Extended structs (adds facilitator, tokenAddress, assetAmount)
-│       │   ├── MockProcessorEndpoint.sol  # submitRequestFor + simulateProcessing + claims
+│       │   ├── Structs.sol             # Extended structs (adds facilitator field to PendingRequest)
+│       │   ├── MockProcessorEndpoint.sol  # submitRequest (ETH + ERC-20) + submitRequestFor (facilitator path)
 │       │   ├── MockEIP2612Token.sol    # ERC-20 with permit (EIP-2612)
 │       │   ├── MockTeeAuthenticator.sol
 │       │   └── MockAuthorityRegistry.sol
@@ -310,7 +310,7 @@ Note: The token address is **not** a configuration parameter — it comes from t
 | Deposit authorization | EIP-2612 (`permit`) | More widely adopted than EIP-3009; sequential nonces; sufficient security for our use case |
 | x402 target app | [vela-nova](https://github.com/HorizenOfficial/vela-nova) | x402 scheme specifically targets private transfers; `/submit` remains app-agnostic |
 | invoiceId | `PaymentRequirements.extra.invoiceId` + vela-nova `invoice_id` field | x402 has no native invoiceId; `extra` is scheme-extensible; facilitator cannot verify it (payload is encrypted) — seller checks the match via TEE events; vela-nova supports `invoice_id` (max 100 chars) |
-| Mock contract | Standalone (not extending ProcessorEndpoint) | ERC-20 prerequisite changes don't exist yet; cleaner self-contained mock |
+| Mock contract | Standalone (not extending ProcessorEndpoint) | `submitRequestFor` doesn't exist in the real contract yet; cleaner self-contained mock |
 | Local chain | Anvil (`anvil` CLI from Foundry) | Standard, fast, deterministic accounts |
 | Contract tooling | Hardhat + typechain | Matches vela contracts repo; TypeScript bindings |
 | HTTP framework | Express.js | Simple, widely used |
@@ -320,9 +320,9 @@ Note: The token address is **not** a configuration parameter — it comes from t
 
 ## Mock Infrastructure
 
-Since the real contract changes (submitRequestFor, ERC-20 support) are not yet implemented in vela, we mock the entire on-chain layer with Anvil + mock contracts.
+Since `submitRequestFor` is not yet implemented in the real vela contract, we mock the entire on-chain layer with Anvil + mock contracts. The real contract (branch `as/erc20-go-backend`) already supports ERC-20 in `submitRequest` — the mock now mirrors this.
 
-- The mock contract is **standalone** (not extending ProcessorEndpoint) because the ERC-20 prerequisite changes don't exist in the current code.
+- The mock contract is **standalone** (not extending ProcessorEndpoint) because `submitRequestFor` and related facilitator nonce tracking don't exist in the real contract yet.
 - All custom Vela logic is isolated in the `@horizen/x402-private-vela-fixed` scheme package, which uses EIP-2612 (`permit`) for deposit authorization instead of EIP-3009 used by Coinbase's standard `exact` scheme. The Coinbase reference facilitator's settle logic cannot be reused directly — our scheme implements its own verify/settle via `submitRequestFor()`.
 
 ## Verification

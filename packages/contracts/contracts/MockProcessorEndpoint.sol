@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./Structs.sol";
 
 // Minimal EIP-2612 permit interface
@@ -34,6 +35,8 @@ interface IERC20Permit {
  * - Per-user facilitator nonces (independent from direct submitRequest calls)
  */
 contract MockProcessorEndpoint is ReentrancyGuard {
+    using SafeERC20 for IERC20;
+
     // -------------------------------------------------------------------------
     // Constants
     // -------------------------------------------------------------------------
@@ -66,6 +69,9 @@ contract MockProcessorEndpoint is ReentrancyGuard {
     // Global token allowlist
     mapping(address => bool) public globalAllowedTokens;
 
+    // Request counter used as index in generateRequestId (incremented on every submit)
+    uint256 private _requestCount;
+
     // -------------------------------------------------------------------------
     // Events
     // -------------------------------------------------------------------------
@@ -92,12 +98,14 @@ contract MockProcessorEndpoint is ReentrancyGuard {
     error InvalidProtocolVersion();
     error ApplicationNotDeployed();
     error InvalidValue();
+    error InvalidPayload();
     error InvalidSignature();
     error DeadlineExpired();
     error InvalidNonce();
     error TokenNotAllowed();
     error InvalidPermit();
     error TransferFailed();
+    error TransferAmountMismatch();
     error NotOwner();
 
     // -------------------------------------------------------------------------
@@ -168,39 +176,68 @@ contract MockProcessorEndpoint is ReentrancyGuard {
     // -------------------------------------------------------------------------
 
     /**
-     * @notice Submit a request directly (ETH only, simplified)
-     * @dev The direct path does NOT increment facilitatorNonces
+     * @notice Submit a request directly (ETH or ERC-20)
+     * @dev The direct path does NOT increment facilitatorNonces.
+     *      For ETH deposits: tokenAddress = address(0), msg.value = assetAmount + maxFeeValue.
+     *      For ERC-20 deposits: tokenAddress = token address, msg.value = maxFeeValue only.
+     *
+     * @param protocolVersion Protocol version
+     * @param applicationId Target application
+     * @param requestType Request type (PROCESS, DEANONYMIZATION, or ASSOCIATEKEY)
+     * @param payload Request payload
+     * @param tokenAddress address(0) for ETH, ERC-20 token address otherwise
+     * @param assetAmount Asset amount to deposit (0 for no deposit)
+     * @param maxFeeValue ETH fee reserved for gas payment
      */
     function submitRequest(
         uint8 protocolVersion,
         uint64 applicationId,
         Structs.RequestType requestType,
         bytes calldata payload,
+        address tokenAddress,
+        uint256 assetAmount,
         uint256 maxFeeValue
     ) external payable nonReentrant returns (bytes32) {
         if (protocolVersion != PROTOCOL_VERSION) revert InvalidProtocolVersion();
         if (!deployedApplications[applicationId]) revert ApplicationNotDeployed();
-        if (requestType == Structs.RequestType.DEPLOYAPP || requestType == Structs.RequestType.DEANONYMIZATION) {
-            revert InvalidRequestType();
-        }
-        if (msg.value != maxFeeValue) revert InvalidValue();
+        if (requestType == Structs.RequestType.DEPLOYAPP) revert InvalidRequestType();
 
-        bytes32 requestId = _generateRequestId(msg.sender, applicationId, requestType, payload);
+        if (tokenAddress == address(0)) {
+            // ETH deposit: msg.value must cover both the asset deposit and the fee
+            if (msg.value != assetAmount + maxFeeValue) revert InvalidValue();
+        } else {
+            // ERC-20 deposit: msg.value covers fee only; token pulled via transferFrom
+            if (msg.value != maxFeeValue) revert InvalidValue();
+            if (assetAmount == 0) revert InvalidValue();
+            if (!globalAllowedTokens[tokenAddress]) revert TokenNotAllowed();
+            IERC20 token = IERC20(tokenAddress);
+            uint256 balanceBefore = token.balanceOf(address(this));
+            token.safeTransferFrom(msg.sender, address(this), assetAmount);
+            uint256 received = token.balanceOf(address(this)) - balanceBefore;
+            if (received != assetAmount) revert TransferAmountMismatch();
+        }
+
+        if (requestType == Structs.RequestType.ASSOCIATEKEY) {
+            if (payload.length != 133 && payload.length != 226) revert InvalidPayload();
+        }
+
+        bytes32 requestId = _generateRequestId(msg.sender, applicationId, requestType, payload, tokenAddress, assetAmount, _requestCount);
 
         requestById[requestId] = Structs.PendingRequest({
             timestamp: block.timestamp,
-            depositAmount: 0,
+            tokenAddress: tokenAddress,
+            assetAmount: assetAmount,
             maxFeeValue: maxFeeValue,
             requestId: requestId,
             payload: payload,
             sender: msg.sender,
             facilitator: address(0),
-            tokenAddress: address(0),
-            assetAmount: 0,
             applicationId: applicationId,
             protocolVersion: protocolVersion,
             requestType: requestType
         });
+
+        unchecked { _requestCount++; }
 
         emit RequestSubmitted(requestId, msg.sender, address(0), applicationId, requestType);
         return requestId;
@@ -295,26 +332,26 @@ contract MockProcessorEndpoint is ReentrancyGuard {
                 IERC20Permit(tokenAddress).permit(sender, address(this), assetAmount, deadline, v, r, s);
             }
 
-            bool success = token.transferFrom(sender, address(this), assetAmount);
-            if (!success) revert TransferFailed();
+            token.safeTransferFrom(sender, address(this), assetAmount);
         }
 
-        bytes32 requestId = _generateRequestId(sender, applicationId, requestType, payload);
+        bytes32 requestId = _generateRequestId(sender, applicationId, requestType, payload, tokenAddress, assetAmount, _requestCount);
 
         requestById[requestId] = Structs.PendingRequest({
             timestamp: block.timestamp,
-            depositAmount: assetAmount,
+            tokenAddress: tokenAddress,
+            assetAmount: assetAmount,
             maxFeeValue: msg.value,
             requestId: requestId,
             payload: payload,
             sender: sender,
             facilitator: msg.sender,
-            tokenAddress: tokenAddress,
-            assetAmount: assetAmount,
             applicationId: applicationId,
             protocolVersion: protocolVersion,
             requestType: requestType
         });
+
+        unchecked { _requestCount++; }
 
         emit RequestSubmitted(requestId, sender, msg.sender, applicationId, requestType);
         return requestId;
@@ -328,18 +365,13 @@ contract MockProcessorEndpoint is ReentrancyGuard {
         address sender,
         uint64 applicationId,
         Structs.RequestType requestType,
-        bytes calldata payload
-    ) internal view returns (bytes32) {
+        bytes calldata payload,
+        address tokenAddress,
+        uint256 assetAmount,
+        uint256 idx
+    ) internal pure returns (bytes32) {
         return keccak256(
-            abi.encodePacked(
-                sender,
-                applicationId,
-                requestType,
-                keccak256(payload),
-                block.timestamp,
-                block.number,
-                facilitatorNonces[sender]
-            )
+            abi.encode(sender, applicationId, requestType, payload, tokenAddress, assetAmount, idx)
         );
     }
 

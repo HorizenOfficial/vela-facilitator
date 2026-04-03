@@ -2,7 +2,7 @@
 pragma solidity ^0.8.28;
 
 // Extended structs based on vela's Structs.sol (https://github.com/HorizenOfficial/vela/blob/main/contracts/contracts/Structs.sol)
-// Adds facilitator, tokenAddress, assetAmount to PendingRequest for ERC-20 deposit support.
+// Adds facilitator field to PendingRequest to track who submitted on behalf of the user.
 contract Structs {
     enum RequestType {
         DEPLOYAPP,
@@ -34,14 +34,13 @@ contract Structs {
 
     struct PendingRequest {
         uint256 timestamp;      // assigned automatically
-        uint256 depositAmount;  // assigned automatically
+        address tokenAddress;   // address(0) = ETH, otherwise ERC-20 token
+        uint256 assetAmount;    // deposited asset amount (0 if ETH-only or no deposit)
         uint256 maxFeeValue;
         bytes32 requestId;      // assigned automatically
         bytes payload;
         address sender;         // assigned automatically (the user, not the facilitator)
         address facilitator;    // the facilitator that submitted the request (address(0) for direct submissions)
-        address tokenAddress;   // ERC-20 token deposited (address(0) if no ERC-20 deposit)
-        uint256 assetAmount;    // amount of ERC-20 tokens deposited
         uint64 applicationId;
         uint8 protocolVersion;
         RequestType requestType;

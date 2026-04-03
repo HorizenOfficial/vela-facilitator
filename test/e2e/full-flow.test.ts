@@ -49,13 +49,13 @@ describe("Full E2E Flow", () => {
       const endpoint = new ethers.Contract(
         fixtures.contracts.processorEndpoint.address,
         [
-          "function requestById(bytes32) view returns (uint256, uint256, uint256, bytes32, bytes, address, address, address, uint256, uint64, uint8, uint8)",
+          "function requestById(bytes32) view returns (uint256, address, uint256, uint256, bytes32, bytes, address, address, uint64, uint8, uint8)",
         ],
         provider
       );
       const request = await endpoint.requestById(res.requestId);
-      expect(request[5].toLowerCase()).toBe(user.address.toLowerCase()); // sender
-      expect(request[6].toLowerCase()).toBe(fixtures.facilitatorAccount.address.toLowerCase()); // facilitator
+      expect(request[6].toLowerCase()).toBe(user.address.toLowerCase()); // sender
+      expect(request[7].toLowerCase()).toBe(fixtures.facilitatorAccount.address.toLowerCase()); // facilitator
 
       // 3. Verify nonce incremented
       const nonceContract = new ethers.Contract(
@@ -93,16 +93,16 @@ describe("Full E2E Flow", () => {
       const endpoint = new ethers.Contract(
         fixtures.contracts.processorEndpoint.address,
         [
-          "function requestById(bytes32) view returns (uint256, uint256, uint256, bytes32, bytes, address, address, address, uint256, uint64, uint8, uint8)",
+          "function requestById(bytes32) view returns (uint256, address, uint256, uint256, bytes32, bytes, address, address, uint64, uint8, uint8)",
         ],
         provider
       );
       const request = await endpoint.requestById(res.requestId);
 
-      expect(request[5].toLowerCase()).toBe(user.address.toLowerCase()); // sender
-      expect(request[6].toLowerCase()).toBe(fixtures.facilitatorAccount.address.toLowerCase()); // facilitator
-      expect(request[7].toLowerCase()).toBe(fixtures.contracts.token.address.toLowerCase()); // tokenAddress
-      expect(request[8]).toBe(assetAmount); // assetAmount
+      expect(request[6].toLowerCase()).toBe(user.address.toLowerCase()); // sender
+      expect(request[7].toLowerCase()).toBe(fixtures.facilitatorAccount.address.toLowerCase()); // facilitator
+      expect(request[1].toLowerCase()).toBe(fixtures.contracts.token.address.toLowerCase()); // tokenAddress
+      expect(request[2]).toBe(assetAmount); // assetAmount
     });
   });
 
@@ -146,13 +146,13 @@ describe("Full E2E Flow", () => {
       const endpoint = new ethers.Contract(
         fixtures.contracts.processorEndpoint.address,
         [
-          "function requestById(bytes32) view returns (uint256, uint256, uint256, bytes32, bytes, address, address, address, uint256, uint64, uint8, uint8)",
+          "function requestById(bytes32) view returns (uint256, address, uint256, uint256, bytes32, bytes, address, address, uint64, uint8, uint8)",
         ],
         provider
       );
       const request = await endpoint.requestById(requestId);
-      expect(request[5].toLowerCase()).toBe(user.address.toLowerCase()); // sender = buyer
-      expect(request[6].toLowerCase()).toBe(fixtures.facilitatorAccount.address.toLowerCase()); // facilitator
+      expect(request[6].toLowerCase()).toBe(user.address.toLowerCase()); // sender = buyer
+      expect(request[7].toLowerCase()).toBe(fixtures.facilitatorAccount.address.toLowerCase()); // facilitator
     });
   });
 });
