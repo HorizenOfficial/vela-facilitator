@@ -4,12 +4,7 @@ import type { GlobalSetupContext } from "vitest/node";
 import { startAnvil, stopAnvil, type AnvilInstance } from "../mock/anvil.js";
 import { deployContracts } from "../mock/deploy.js";
 import { loadConfig } from "../src/config.js";
-import express from "express";
-import cors from "cors";
-import { x402Facilitator } from "@x402/core/facilitator";
-import { registerPrivateVelaFixedScheme } from "@horizen/x402-private-vela-fixed";
-import { createX402Router } from "../src/routes/x402.js";
-import { createSubmitRouter } from "../src/routes/submit.js";
+import { createApp } from "../src/app.js";
 import { type Server } from "http";
 
 export interface TestFixtures {
@@ -63,23 +58,7 @@ export async function setup({ provide }: GlobalSetupContext) {
   process.env.PORT = String(PORT);
 
   const config = loadConfig();
-  const facilitatorSigner = config.signer.connect(provider);
-
-  const facilitator = new x402Facilitator();
-  registerPrivateVelaFixedScheme(facilitator, {
-    rpcUrl: config.rpcUrl,
-    contractAddress: config.contractAddress,
-    signer: facilitatorSigner,
-    maxFeeValue: config.maxFeeValue,
-    applicationId: config.applicationId,
-    network: config.network,
-  });
-
-  const app = express();
-  app.use(cors());
-  app.use(express.json());
-  app.use("/", createX402Router(facilitator));
-  app.use("/", createSubmitRouter(config, facilitatorSigner));
+  const app = createApp(config, provider);
 
   await new Promise<void>((resolve) => {
     server = app.listen(PORT, resolve);

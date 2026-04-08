@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, inject } from "vitest";
 import { ethers } from "ethers";
+import { generateKeyPair, exportPublicKeyToHex, hexToBytes } from "@horizen/vela-common-ts";
 import {
   REQUEST_TYPE_ASSOCIATEKEY,
   REQUEST_TYPE_PROCESS,
@@ -31,8 +32,10 @@ describe("Full E2E Flow", () => {
     it("1. Submits ASSOCIATEKEY request (assetAmount=0, raw P-521 key payload)", async () => {
       const user = createTestUser(fixtures.userAccounts[0].privateKey, fixtures);
 
-      // Raw 133-byte P-521 uncompressed public key (unencrypted for ASSOCIATEKEY)
-      const rawPayload = new Uint8Array(133).fill(0x04);
+      // Generate a real P-521 key pair and use the raw uncompressed public key
+      const keyPair = await generateKeyPair();
+      const pubKeyHex = await exportPublicKeyToHex(keyPair.publicKey);
+      const rawPayload = hexToBytes(pubKeyHex);
 
       const body = await user.buildSubmitPayload({
         requestType: REQUEST_TYPE_ASSOCIATEKEY,
