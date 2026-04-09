@@ -116,7 +116,7 @@ All configuration is via environment variables:
 | `PROCESSOR_ENDPOINT_ADDRESS` | yes | — | Address of the deployed `ProcessorEndpoint` contract |
 | `CHAIN_ID` | yes | — | EVM chain ID (e.g. `2651420` for Vela mainnet) |
 | `MAX_FEE_VALUE` | no | `0` | ETH in wei sent as `msg.value` to cover service fees |
-| `VELA_NOVA_APPLICATION_ID` | no | `1` | vela-nova application ID |
+| `VELA_NOVA_APPLICATION_ID` | no | `1` | vela-nova application ID, used for x402 payments |
 | `PORT` | no | `3000` | HTTP server port |
 
 ## x402 scheme: `private-vela-fixed`
