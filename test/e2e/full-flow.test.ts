@@ -29,7 +29,7 @@ async function post(path: string, body: unknown) {
 
 describe("Full E2E Flow", () => {
   describe("Core /submit flow (generic requests)", () => {
-    it("1. Submits ASSOCIATEKEY request (assetAmount=0, raw P-521 key payload)", async () => {
+    it("1. ASSOCIATEKEY — registers a P-521 key (assetAmount=0, raw key payload)", async () => {
       const user = createTestUser(fixtures.userAccounts[0].privateKey, fixtures);
 
       // Generate a real P-521 key pair and use the raw uncompressed public key
@@ -47,7 +47,7 @@ describe("Full E2E Flow", () => {
       expect(status).toBe(200);
       expect(res.requestId).toBeTruthy();
 
-      // 2. Verify on-chain: PendingRequest has correct sender and facilitator
+      // Verify on-chain: PendingRequest has correct sender and facilitator
       const provider = new ethers.JsonRpcProvider(fixtures.rpcUrl);
       const endpoint = new ethers.Contract(
         fixtures.contracts.processorEndpoint.address,
@@ -60,7 +60,7 @@ describe("Full E2E Flow", () => {
       expect(request[6].toLowerCase()).toBe(user.address.toLowerCase()); // sender
       expect(request[7].toLowerCase()).toBe(fixtures.facilitatorAccount.address.toLowerCase()); // facilitator
 
-      // 3. Verify nonce incremented
+      // Verify nonce incremented
       const nonceContract = new ethers.Contract(
         fixtures.contracts.processorEndpoint.address,
         ["function facilitatorNonces(address) view returns (uint256)"],
@@ -70,20 +70,14 @@ describe("Full E2E Flow", () => {
       expect(nonce).toBeGreaterThan(0n);
     });
 
-    it("4. Submits PROCESS with assetAmount > 0 (two-signature flow + ERC-20 deposit)", async () => {
+    it("2. DEPOSIT — deposits ERC-20 tokens (two-signature flow, empty payload)", async () => {
       const user = createTestUser(fixtures.userAccounts[1].privateKey, fixtures);
       const assetAmount = ethers.parseUnits("25", 18);
 
-      const payload = await user.buildTransferPayload({
-        to: fixtures.userAccounts[2].address,
-        amount: "25",
-        invoice_id: "E2E-TEST-001",
-        asset: fixtures.contracts.token.address,
-      });
-
+      // Deposit uses an empty payload — the amount is in the request, not the payload
       const body = await user.buildSubmitPayload({
         requestType: REQUEST_TYPE_PROCESS,
-        payload,
+        payload: new Uint8Array(0),
         tokenAddress: fixtures.contracts.token.address,
         assetAmount,
       });
@@ -92,7 +86,7 @@ describe("Full E2E Flow", () => {
       expect(status).toBe(200);
       expect(res.requestId).toBeTruthy();
 
-      // 5. Verify on-chain
+      // Verify on-chain
       const provider = new ethers.JsonRpcProvider(fixtures.rpcUrl);
       const endpoint = new ethers.Contract(
         fixtures.contracts.processorEndpoint.address,
@@ -111,7 +105,7 @@ describe("Full E2E Flow", () => {
   });
 
   describe("x402 flow (verify + settle)", () => {
-    it("verifies and settles a payment via x402 endpoints", async () => {
+    it("3. TRANSFER — verifies and settles a payment via x402 endpoints", async () => {
       const user = createTestUser(fixtures.userAccounts[2].privateKey, fixtures);
       const requirements = {
         scheme: "private-vela-fixed",
