@@ -12,6 +12,8 @@ import {
   type SupportedRequestType,
   type PayloadInstructions,
 } from "../../packages/x402-private-vela-fixed/src/types.js";
+import type { PaymentRequirements, PaymentPayload } from "@x402/core/types";
+
 // ABI fragments for on-chain reads
 const ENDPOINT_ABI = [
   "function facilitatorNonces(address) view returns (uint256)",
@@ -23,50 +25,139 @@ const TOKEN_ABI = [
   "function allowance(address, address) view returns (uint256)",
 ];
 
-export interface TestUserConfig {
+export interface FacilitatorClientConfig {
   wallet: ethers.Wallet;
   provider: ethers.JsonRpcProvider;
   contractAddress: string;
   tokenAddress: string;
   chainId: number;
-  teePublicKeyHex: string; // hex string of TEE's P-521 public key
+  teePublicKeyHex: string;
+  facilitatorUrl: string;
+}
+
+export interface HttpResponse<T = Record<string, unknown>> {
+  status: number;
+  body: T;
 }
 
 /**
- * TestUser: helper for building signed test payloads.
- * Handles EIP-712 + EIP-2612 signing and payload encryption.
+ * FacilitatorClient: client library for interacting with a vela-facilitator server.
+ * Handles EIP-712 + EIP-2612 signing, payload encryption, and HTTP calls.
  */
-export class TestUser {
+export class FacilitatorClient {
   readonly wallet: ethers.Wallet;
   private readonly provider: ethers.JsonRpcProvider;
   private readonly contractAddress: string;
   private readonly tokenAddress: string;
   private readonly chainId: number;
   private readonly teePublicKeyHex: string;
+  private readonly facilitatorUrl: string;
 
-  constructor(config: TestUserConfig) {
+  constructor(config: FacilitatorClientConfig) {
     this.wallet = config.wallet.connect(config.provider);
     this.provider = config.provider;
     this.contractAddress = config.contractAddress;
     this.tokenAddress = config.tokenAddress;
     this.chainId = config.chainId;
     this.teePublicKeyHex = config.teePublicKeyHex;
+    this.facilitatorUrl = config.facilitatorUrl;
   }
 
   get address(): string {
     return this.wallet.address;
   }
 
+  // ---------------------------------------------------------------------------
+  // HTTP
+  // ---------------------------------------------------------------------------
+
   /**
-   * Read the current facilitator nonce for this user from chain
+   * Low-level POST to the facilitator server.
+   * Handles BigInt serialization automatically.
+   */
+  async post<T = Record<string, unknown>>(path: string, body: unknown): Promise<HttpResponse<T>> {
+    const res = await fetch(`${this.facilitatorUrl}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body, (_key, value) =>
+        typeof value === "bigint" ? value.toString() : value
+      ),
+    });
+    return { status: res.status, body: await res.json() as T };
+  }
+
+  /**
+   * Low-level GET to the facilitator server.
+   */
+  async get<T = Record<string, unknown>>(path: string): Promise<HttpResponse<T>> {
+    const res = await fetch(`${this.facilitatorUrl}${path}`);
+    return { status: res.status, body: await res.json() as T };
+  }
+
+  // ---------------------------------------------------------------------------
+  // High-level API
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Submit a request to POST /submit.
+   * Builds the signed payload and posts it in one call.
+   */
+  async submit(params: {
+    requestType: SupportedRequestType;
+    payload: Uint8Array;
+    tokenAddress?: string;
+    assetAmount?: bigint;
+    applicationId?: bigint;
+  }): Promise<HttpResponse> {
+    const body = await this.buildSubmitPayload(params);
+    return this.post("/submit", body);
+  }
+
+  /**
+   * Verify a payment via POST /verify.
+   */
+  async verify(
+    paymentPayload: PaymentPayload,
+    paymentRequirements: PaymentRequirements,
+  ): Promise<HttpResponse> {
+    return this.post("/verify", { paymentPayload, paymentRequirements });
+  }
+
+  /**
+   * Settle a payment via POST /settle.
+   */
+  async settle(
+    paymentPayload: PaymentPayload,
+    paymentRequirements: PaymentRequirements,
+  ): Promise<HttpResponse> {
+    return this.post("/settle", { paymentPayload, paymentRequirements });
+  }
+
+  /**
+   * Query supported schemes via GET /supported.
+   */
+  async supported(): Promise<HttpResponse> {
+    return this.get("/supported");
+  }
+
+  // ---------------------------------------------------------------------------
+  // On-chain reads
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Read the current facilitator nonce for this user from chain.
    */
   async getFacilitatorNonce(): Promise<bigint> {
     const endpoint = new ethers.Contract(this.contractAddress, ENDPOINT_ABI, this.provider);
     return endpoint.facilitatorNonces(this.wallet.address);
   }
 
+  // ---------------------------------------------------------------------------
+  // Signing
+  // ---------------------------------------------------------------------------
+
   /**
-   * Build the EIP-712 domain separator for the ProcessorEndpoint contract
+   * Build the EIP-712 domain separator for the ProcessorEndpoint contract.
    */
   private getDomainSeparatorHash(): string {
     return ethers.keccak256(
@@ -88,7 +179,7 @@ export class TestUser {
   }
 
   /**
-   * Sign an EIP-712 RequestAuthorization
+   * Sign an EIP-712 RequestAuthorization.
    */
   async signRequestAuthorization(params: {
     requestType: SupportedRequestType;
@@ -152,7 +243,7 @@ export class TestUser {
   }
 
   /**
-   * Sign an EIP-2612 permit
+   * Sign an EIP-2612 permit.
    */
   async signDepositPermit(params: {
     spender: string;
@@ -197,6 +288,10 @@ export class TestUser {
     };
   }
 
+  // ---------------------------------------------------------------------------
+  // Payload building
+  // ---------------------------------------------------------------------------
+
   /**
    * Encrypt a JSON payload with the TEE's P-521 public key using real ECIES.
    */
@@ -207,7 +302,7 @@ export class TestUser {
   }
 
   /**
-   * Build a vela-nova transfer payload and encrypt it
+   * Build a vela-nova transfer payload and encrypt it.
    */
   async buildTransferPayload(params: {
     to: string;
@@ -229,15 +324,13 @@ export class TestUser {
   }
 
   /**
-   * Build a full POST /submit payload
+   * Build a full POST /submit payload (without sending it).
    */
   async buildSubmitPayload(params: {
     requestType: SupportedRequestType;
     payload: Uint8Array;
     tokenAddress?: string;
     assetAmount?: bigint;
-    to?: string;
-    invoiceId?: string;
     applicationId?: bigint;
   }): Promise<Record<string, unknown>> {
     const payloadHash = ethers.keccak256(params.payload);
@@ -280,12 +373,12 @@ export class TestUser {
   }
 
   /**
-   * Build an x402 PaymentPayload for the facilitator
+   * Build an x402 PaymentPayload for the facilitator (without sending it).
    */
   async buildX402Payload(params: {
-    requirements: import("@x402/core/types").PaymentRequirements;
+    requirements: PaymentRequirements;
     x402Version?: number;
-  }): Promise<import("@x402/core/types").PaymentPayload> {
+  }): Promise<PaymentPayload> {
     const req = params.requirements;
     const assetAmount = BigInt(req.amount);
     const tokenAddress = assetAmount > 0n ? this.tokenAddress : ethers.ZeroAddress;
@@ -336,21 +429,22 @@ export class TestUser {
 }
 
 /**
- * Create a TestUser from a test account and fixtures
+ * Create a FacilitatorClient from a test account and fixtures.
  */
-export function createTestUser(
+export function createClient(
   privateKey: string,
   fixtures: import("../setup.js").TestFixtures
-): TestUser {
+): FacilitatorClient {
   const provider = new ethers.JsonRpcProvider(fixtures.rpcUrl);
   const wallet = new ethers.Wallet(privateKey);
 
-  return new TestUser({
+  return new FacilitatorClient({
     wallet,
     provider,
     contractAddress: fixtures.contracts.processorEndpoint.address,
     tokenAddress: fixtures.contracts.token.address,
     chainId: fixtures.chainId,
     teePublicKeyHex: fixtures.teePublicKeyHex,
+    facilitatorUrl: fixtures.serverUrl,
   });
 }

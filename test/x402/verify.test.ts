@@ -1,27 +1,16 @@
 import { describe, it, expect, beforeAll, inject } from "vitest";
 import { ethers } from "ethers";
-import { createTestUser } from "../helpers/signer.js";
+import { createClient } from "../helpers/client.js";
 
 import type { PaymentRequirements } from "@x402/core/types";
 
-let fixtures: import("../setup.js").TestFixtures;
-let serverUrl: string;
+type TestFixtures = import("../setup.js").TestFixtures;
+
+let fixtures: TestFixtures;
 
 beforeAll(() => {
-  fixtures = inject("testFixtures") as import("../setup.js").TestFixtures;
-  serverUrl = fixtures.serverUrl;
+  fixtures = inject("testFixtures") as TestFixtures;
 });
-
-async function post(path: string, body: unknown) {
-  const res = await fetch(`${serverUrl}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body, (_key, value) =>
-      typeof value === "bigint" ? value.toString() : value
-    ),
-  });
-  return { status: res.status, body: await res.json() };
-}
 
 function makeRequirements(fixtures: TestFixtures, amount = "0"): PaymentRequirements {
   return {
@@ -37,45 +26,39 @@ function makeRequirements(fixtures: TestFixtures, amount = "0"): PaymentRequirem
 
 describe("POST /verify", () => {
   it("returns isValid=true for valid payload", async () => {
-    const user = createTestUser(fixtures.userAccounts[0].privateKey, fixtures);
+    const client = createClient(fixtures.userAccounts[0].privateKey, fixtures);
     const requirements = makeRequirements(fixtures);
-    const paymentPayload = await user.buildX402Payload({ requirements });
+    const paymentPayload = await client.buildX402Payload({ requirements });
 
-    const { status, body } = await post("/verify", {
-      paymentPayload,
-      paymentRequirements: requirements,
-    });
+    const { status, body } = await client.verify(paymentPayload, requirements);
 
     expect(status).toBe(200);
     expect(body.isValid).toBe(true);
-    expect(body.payer.toLowerCase()).toBe(user.address.toLowerCase());
+    expect((body.payer as string).toLowerCase()).toBe(client.address.toLowerCase());
   });
 
   it("returns isValid=false for invalid signature", async () => {
-    const user = createTestUser(fixtures.userAccounts[0].privateKey, fixtures);
+    const client = createClient(fixtures.userAccounts[0].privateKey, fixtures);
     const requirements = makeRequirements(fixtures);
-    const paymentPayload = await user.buildX402Payload({ requirements });
+    const paymentPayload = await client.buildX402Payload({ requirements });
 
     // Corrupt the request signature
     (paymentPayload.payload as Record<string, unknown>).requestSignature =
       "0x" + "aa".repeat(65);
 
-    const { body } = await post("/verify", {
-      paymentPayload,
-      paymentRequirements: requirements,
-    });
+    const { body } = await client.verify(paymentPayload, requirements);
 
     expect(body.isValid).toBe(false);
     expect(body.invalidReason).toBeTruthy();
   });
 
   it("returns isValid=false for expired deadline", async () => {
-    const user = createTestUser(fixtures.userAccounts[0].privateKey, fixtures);
+    const client = createClient(fixtures.userAccounts[0].privateKey, fixtures);
     const requirements = makeRequirements(fixtures);
 
     // Build with an expired deadline
     const expiredDeadline = BigInt(Math.floor(Date.now() / 1000) - 100);
-    const payload = await user.buildTransferPayload({
+    const payload = await client.buildTransferPayload({
       to: requirements.payTo,
       amount: requirements.amount,
       asset: ethers.ZeroAddress,
@@ -84,7 +67,7 @@ describe("POST /verify", () => {
     const payloadHash = ethers.keccak256(payload);
 
     const { signature: requestSignature, authorization } =
-      await user.signRequestAuthorization({
+      await client.signRequestAuthorization({
         requestType: 1, // PROCESS
         payloadHash,
         deadline: expiredDeadline,
@@ -94,7 +77,7 @@ describe("POST /verify", () => {
       x402Version: 2,
       accepted: requirements,
       payload: {
-        sender: user.address,
+        sender: client.address,
         requestSignature,
         depositPermit: null,
         requestAuthorization: {
@@ -105,20 +88,20 @@ describe("POST /verify", () => {
       },
     };
 
-    const { body } = await post("/verify", {
+    const { body } = await client.post("/verify", {
       paymentPayload,
       paymentRequirements: requirements,
     });
 
     expect(body.isValid).toBe(false);
-    expect(body.invalidReason).toContain("deadline");
+    expect((body.invalidReason as string)).toContain("deadline");
   });
 
   it("returns isValid=false for wrong nonce", async () => {
-    const user = createTestUser(fixtures.userAccounts[0].privateKey, fixtures);
+    const client = createClient(fixtures.userAccounts[0].privateKey, fixtures);
     const requirements = makeRequirements(fixtures);
 
-    const payload = await user.buildTransferPayload({
+    const payload = await client.buildTransferPayload({
       to: requirements.payTo,
       amount: requirements.amount,
       asset: ethers.ZeroAddress,
@@ -128,7 +111,7 @@ describe("POST /verify", () => {
 
     // Use an incorrect nonce (999)
     const { signature: requestSignature, authorization } =
-      await user.signRequestAuthorization({
+      await client.signRequestAuthorization({
         requestType: 1,
         payloadHash,
         nonce: 999n,
@@ -138,7 +121,7 @@ describe("POST /verify", () => {
       x402Version: 2,
       accepted: requirements,
       payload: {
-        sender: user.address,
+        sender: client.address,
         requestSignature,
         depositPermit: null,
         requestAuthorization: authorization,
@@ -146,25 +129,26 @@ describe("POST /verify", () => {
       },
     };
 
-    const { body } = await post("/verify", {
+    const { body } = await client.post("/verify", {
       paymentPayload,
       paymentRequirements: requirements,
     });
 
     expect(body.isValid).toBe(false);
-    expect(body.invalidReason).toContain("nonce");
+    expect((body.invalidReason as string)).toContain("nonce");
   });
 });
 
 describe("GET /supported", () => {
   it("returns the private-vela-fixed scheme", async () => {
-    const res = await fetch(`${serverUrl}/supported`);
-    const body = await res.json();
+    const client = createClient(fixtures.userAccounts[0].privateKey, fixtures);
+    const { status, body } = await client.supported();
 
-    expect(res.status).toBe(200);
+    expect(status).toBe(200);
     expect(body.kinds).toBeTruthy();
-    const velaKind = body.kinds.find((k: Record<string, string>) => k.scheme === "private-vela-fixed");
+    const kinds = body.kinds as Array<Record<string, string>>;
+    const velaKind = kinds.find((k) => k.scheme === "private-vela-fixed");
     expect(velaKind).toBeTruthy();
-    expect(velaKind.network).toBe(`eip155:${fixtures.chainId}`);
+    expect(velaKind!.network).toBe(`eip155:${fixtures.chainId}`);
   });
 });
