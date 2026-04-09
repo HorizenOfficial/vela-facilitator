@@ -1,0 +1,15 @@
+services:
+  facilitator:
+    build:
+      context: ..
+      dockerfile: dockerfiles/Dockerfile
+    env_file: .env
+    ports:
+      - "${PORT:-3000}:3000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/supported"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
