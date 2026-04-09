@@ -97,6 +97,16 @@ CHAIN_ID=2651420 \
 pnpm dev
 ```
 
+### Run with Docker
+
+```bash
+cd dockerfiles
+cp .env.template .env   # fill in the required values
+docker compose up -d
+```
+
+See [`dockerfiles/README.md`](dockerfiles/README.md) for standalone Docker build instructions and full configuration details.
+
 ### Run tests
 
 Tests start a local Anvil node, deploy mock contracts, and run the full facilitator stack.
