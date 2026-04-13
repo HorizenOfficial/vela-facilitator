@@ -26,6 +26,8 @@ Copy `.env.template` to `.env` and set the required variables:
 | `VELA_NOVA_APPLICATION_ID` | no | `1` | vela-nova application ID for x402 payments |
 | `PORT` | no | `3000` | HTTP server port |
 
+If you have started the vela dev local environment you can also use the .env.dev instead, with values already set for it.
+
 ## Standalone Docker build (without Compose)
 
 ```bash
