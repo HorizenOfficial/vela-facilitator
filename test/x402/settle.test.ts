@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, inject } from "vitest";
 import { ethers } from "ethers";
-import { createClient } from "../helpers/client.js";
+import { createClient } from "../setup.js";
 
 import type { PaymentRequirements } from "@x402/core/types";
 

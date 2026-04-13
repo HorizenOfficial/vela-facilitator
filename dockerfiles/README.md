@@ -36,6 +36,16 @@ docker build -f dockerfiles/Dockerfile -t vela-facilitator .
 docker run --env-file dockerfiles/.env -p 3000:3000 vela-facilitator
 ```
 
+## Smoke test
+
+Once the container is up you can run a quick HTTP smoke test from the repo root:
+
+```bash
+pnpm dev:smoke
+```
+
+It hits `GET /supported`, `POST /submit` (ASSOCIATEKEY), `POST /verify`, and `POST /settle`. Defaults match the vela dev stack; override `FACILITATOR_URL`, `RPC_URL`, `PROCESSOR_ENDPOINT_ADDRESS`, etc. to target a different environment. See the [root README](../README.md#dev-smoke-test) and [`scripts/dev-smoke.ts`](../scripts/dev-smoke.ts) for details.
+
 ## Endpoints
 
 | Method | Path | Description |

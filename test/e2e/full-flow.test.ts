@@ -5,7 +5,7 @@ import {
   REQUEST_TYPE_ASSOCIATEKEY,
   REQUEST_TYPE_PROCESS,
 } from "../../packages/x402-private-vela-fixed/src/types.js";
-import { createClient } from "../helpers/client.js";
+import { createClient } from "../setup.js";
 
 
 let fixtures: import("../setup.js").TestFixtures;

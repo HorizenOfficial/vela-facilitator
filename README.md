@@ -115,6 +115,41 @@ Tests start a local Anvil node, deploy mock contracts, and run the full facilita
 pnpm test
 ```
 
+### Dev smoke test
+
+`pnpm dev:smoke` runs a small HTTP-level smoke test against an **already-running** facilitator + chain (no bootstrap, no contract deploy). It mirrors the e2e flow:
+
+1. `GET /supported`
+2. `POST /submit` — `ASSOCIATEKEY` with a fresh P-521 key for the buyer
+3. `POST /verify` — x402 transfer with `assetAmount=0`
+4. `POST /settle` — x402 transfer with `assetAmount=0`
+
+Defaults target the vela dev stack (Anvil + `vela/dockerfiles/.env.dev`); override any env var to point elsewhere (e.g. the remote dev RPC):
+
+| Variable | Default |
+|---|---|
+| `FACILITATOR_URL` | `http://localhost:3000` |
+| `RPC_URL` | `http://localhost:8545` |
+| `CHAIN_ID` | `31337` |
+| `PROCESSOR_ENDPOINT_ADDRESS` | deterministic Anvil deploy address |
+| `TOKEN_ADDRESS` | `ZeroAddress` (fine for `assetAmount=0`) |
+| `TEE_PUBLIC_KEY_HEX` | dev TEE public key (from vela `.env.dev`) |
+| `BUYER_PRIVATE_KEY` | Anvil account #3 |
+| `SELLER_ADDRESS` | Anvil account #4 |
+
+Prerequisites (not performed by the script):
+- `ProcessorEndpoint` + `MockEIP2612Token` deployed at the configured addresses
+- Facilitator account funded with ETH
+- The target `VELA_NOVA_APPLICATION_ID` is deployed on-chain (otherwise `/settle` reverts with `InvalidApplicationId()`)
+
+```bash
+pnpm dev:smoke
+# or with overrides
+FACILITATOR_URL=http://localhost:3000 RPC_URL=http://dev-rpc:8545 pnpm dev:smoke
+```
+
+See [`scripts/dev-smoke.ts`](scripts/dev-smoke.ts) for the full list of overridable env vars.
+
 ## Configuration
 
 All configuration is via environment variables:

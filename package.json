@@ -6,6 +6,7 @@
   "description": "Gasless request submission service for the Vela blockchain platform",
   "scripts": {
     "dev": "tsx src/index.ts",
+    "dev:smoke": "tsx scripts/dev-smoke.ts",
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest"

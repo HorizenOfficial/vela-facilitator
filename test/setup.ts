@@ -1,5 +1,6 @@
 import { ethers } from "ethers";
 import { generateKeyPair, exportPublicKeyToHex, hexToBytes } from "@horizen/vela-common-ts";
+import { FacilitatorClient } from "@horizen/x402-private-vela-fixed";
 import type { GlobalSetupContext } from "vitest/node";
 import { startAnvil, stopAnvil, type AnvilInstance } from "../mock/anvil.js";
 import { deployContracts } from "../mock/deploy.js";
@@ -80,6 +81,24 @@ export async function setup({ provide }: GlobalSetupContext) {
 
   // Provide fixtures to fork workers via vitest's cross-process IPC
   provide("testFixtures", fixtures);
+}
+
+/**
+ * Create a FacilitatorClient from a test account and fixtures.
+ */
+export function createClient(privateKey: string, fixtures: TestFixtures): FacilitatorClient {
+  const provider = new ethers.JsonRpcProvider(fixtures.rpcUrl);
+  const wallet = new ethers.Wallet(privateKey);
+
+  return new FacilitatorClient({
+    wallet,
+    provider,
+    contractAddress: fixtures.contracts.processorEndpoint.address,
+    tokenAddress: fixtures.contracts.token.address,
+    chainId: fixtures.chainId,
+    teePublicKeyHex: fixtures.teePublicKeyHex,
+    facilitatorUrl: fixtures.serverUrl,
+  });
 }
 
 export async function teardown() {

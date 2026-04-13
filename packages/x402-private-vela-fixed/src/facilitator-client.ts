@@ -2,7 +2,6 @@ import { ethers } from "ethers";
 import { encrypt, generateKeyPair, importPublicKeyFromHex } from "@horizen/vela-common-ts";
 import {
   REQUEST_TYPE_PROCESS,
-  REQUEST_TYPE_ASSOCIATEKEY,
   EIP712_DOMAIN_NAME,
   EIP712_DOMAIN_VERSION,
   REQUEST_AUTHORIZATION_TYPEHASH,
@@ -11,7 +10,7 @@ import {
   type RequestAuthorization,
   type SupportedRequestType,
   type PayloadInstructions,
-} from "../../packages/x402-private-vela-fixed/src/types.js";
+} from "./types.js";
 import type { PaymentRequirements, PaymentPayload } from "@x402/core/types";
 
 // ABI fragments for on-chain reads
@@ -426,25 +425,4 @@ export class FacilitatorClient {
       payload: velaPayload as unknown as Record<string, unknown>,
     };
   }
-}
-
-/**
- * Create a FacilitatorClient from a test account and fixtures.
- */
-export function createClient(
-  privateKey: string,
-  fixtures: import("../setup.js").TestFixtures
-): FacilitatorClient {
-  const provider = new ethers.JsonRpcProvider(fixtures.rpcUrl);
-  const wallet = new ethers.Wallet(privateKey);
-
-  return new FacilitatorClient({
-    wallet,
-    provider,
-    contractAddress: fixtures.contracts.processorEndpoint.address,
-    tokenAddress: fixtures.contracts.token.address,
-    chainId: fixtures.chainId,
-    teePublicKeyHex: fixtures.teePublicKeyHex,
-    facilitatorUrl: fixtures.serverUrl,
-  });
 }
