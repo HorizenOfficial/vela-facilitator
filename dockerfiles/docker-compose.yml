@@ -1,5 +1,6 @@
 services:
   facilitator:
+    container_name: vela-facilitator
     build:
       context: ..
       dockerfile: dockerfiles/Dockerfile

@@ -18,6 +18,7 @@
  *   TEE_PUBLIC_KEY_HEX           default: dev TEE public key (from vela .env.dev)
  *   BUYER_PRIVATE_KEY            default: Anvil account #3
  *   SELLER_ADDRESS               default: Anvil account #4 address
+ *   APPLICATION_ID               default: 1 (vela-nova)
  *
  * Prerequisites assumed satisfied on-chain (not performed here):
  *   - ProcessorEndpoint + MockEIP2612Token deployed at the addresses above
@@ -62,6 +63,7 @@ const DEFAULT_BUYER_PRIVATE_KEY =
   "0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6";
 // Anvil account #4 address
 const DEFAULT_SELLER_ADDRESS = "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65";
+const DEFAULT_APPLICATION_ID = "16137246512537428841";
 
 async function main() {
   const facilitatorUrl = getEnv("FACILITATOR_URL", DEFAULT_FACILITATOR_URL);
@@ -72,6 +74,7 @@ async function main() {
   const teePublicKeyHex = getEnv("TEE_PUBLIC_KEY_HEX", DEFAULT_TEE_PUBLIC_KEY_HEX);
   const buyerPrivateKey = getEnv("BUYER_PRIVATE_KEY", DEFAULT_BUYER_PRIVATE_KEY);
   const sellerAddress = getEnv("SELLER_ADDRESS", DEFAULT_SELLER_ADDRESS);
+  const applicationId = BigInt(getEnv("APPLICATION_ID", DEFAULT_APPLICATION_ID));
 
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const wallet = new ethers.Wallet(buyerPrivateKey);
@@ -91,6 +94,7 @@ async function main() {
   console.log(`RPC:         ${rpcUrl} (chainId=${chainId})`);
   console.log(`Buyer:       ${wallet.address}`);
   console.log(`Seller:      ${sellerAddress}`);
+  console.log(`AppId:       ${applicationId}`);
 
   // 1. GET /supported
   console.log(`\n[1/4] GET /supported`);
@@ -109,6 +113,7 @@ async function main() {
     requestType: REQUEST_TYPE_ASSOCIATEKEY,
     payload: rawPayload,
     assetAmount: 0n,
+    applicationId,
   });
   if (assoc.status !== 200) {
     throw new Error(`POST /submit failed: ${assoc.status} ${JSON.stringify(assoc.body)}`);
