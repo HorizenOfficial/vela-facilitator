@@ -18,7 +18,8 @@
  *   TEE_PUBLIC_KEY_HEX           default: dev TEE public key (from vela .env.dev)
  *   BUYER_PRIVATE_KEY            default: Anvil account #3
  *   SELLER_ADDRESS               default: Anvil account #4 address
- *   APPLICATION_ID               default: 1 (vela-nova)
+ *   APPLICATION_ID               default: 16137246512537428841 (vela-nova)
+ *   TEE_AUTHENTICATOR_ADDRESS    default: deterministic Anvil deploy address
  *
  * Prerequisites assumed satisfied on-chain (not performed here):
  *   - ProcessorEndpoint + MockEIP2612Token deployed at the addresses above
@@ -36,6 +37,7 @@ import {
   generateKeyPair,
   exportPublicKeyToHex,
   hexToBytes,
+  VelaClient,
 } from "@horizen/vela-common-ts";
 import {
   FacilitatorClient,
@@ -45,6 +47,32 @@ import type { PaymentRequirements } from "@x402/core/types";
 
 function getEnv(name: string, def: string): string {
   return process.env[name] ?? def;
+}
+
+const POLLING_INTERVAL_MS = 2_000;
+const POLLING_TIMEOUT_MS = 60_000;
+
+/**
+ * Poll chain for the RequestCompleted event matching `requestId` via VelaClient.
+ * Mirrors the vela-nova wallet's WaitForRequestCompleted pattern.
+ */
+async function waitForRequestCompleted(
+  velaClient: VelaClient,
+  requestId: string,
+): Promise<{ status: bigint; errorCode: bigint | undefined; errorMessage: string | undefined }> {
+  const deadline = Date.now() + POLLING_TIMEOUT_MS;
+
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, POLLING_INTERVAL_MS));
+    const result = await velaClient.getRequestCompletedEvent(requestId, undefined, undefined);
+    if (result) {
+      return { status: result.status, errorCode: result.errorCode, errorMessage: result.errorMessage };
+    }
+  }
+  throw new Error(
+    `Polling timeout (${POLLING_TIMEOUT_MS / 1000}s) waiting for RequestCompleted for ${requestId}. ` +
+    `This does NOT mean the request failed — it may still be pending.`,
+  );
 }
 
 // Dev defaults: match the vela dev stack (Anvil + vela/dockerfiles/.env.dev)
@@ -64,6 +92,7 @@ const DEFAULT_BUYER_PRIVATE_KEY =
 // Anvil account #4 address
 const DEFAULT_SELLER_ADDRESS = "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65";
 const DEFAULT_APPLICATION_ID = "16137246512537428841";
+const DEFAULT_TEE_AUTHENTICATOR_ADDRESS = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0";
 
 async function main() {
   const facilitatorUrl = getEnv("FACILITATOR_URL", DEFAULT_FACILITATOR_URL);
@@ -75,9 +104,16 @@ async function main() {
   const buyerPrivateKey = getEnv("BUYER_PRIVATE_KEY", DEFAULT_BUYER_PRIVATE_KEY);
   const sellerAddress = getEnv("SELLER_ADDRESS", DEFAULT_SELLER_ADDRESS);
   const applicationId = BigInt(getEnv("APPLICATION_ID", DEFAULT_APPLICATION_ID));
+  const teeAuthenticatorAddress = getEnv("TEE_AUTHENTICATOR_ADDRESS", DEFAULT_TEE_AUTHENTICATOR_ADDRESS);
 
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const wallet = new ethers.Wallet(buyerPrivateKey);
+
+  const signer = wallet.connect(provider);
+  const velaClient = new VelaClient(signer, false, teeAuthenticatorAddress, contractAddress);
+
+  // Generate buyer's P-521 keypair upfront — used for both ASSOCIATEKEY registration and payload encryption
+  const buyerKeyPair = await generateKeyPair();
 
   const client = new FacilitatorClient({
     wallet,
@@ -87,6 +123,8 @@ async function main() {
     chainId,
     teePublicKeyHex,
     facilitatorUrl,
+    applicationId,
+    buyerP521PrivateKey: buyerKeyPair.privateKey,
   });
 
   console.log(`\n=== dev-smoke ===`);
@@ -95,6 +133,7 @@ async function main() {
   console.log(`Buyer:       ${wallet.address}`);
   console.log(`Seller:      ${sellerAddress}`);
   console.log(`AppId:       ${applicationId}`);
+  console.log(`TeeAuth:     ${teeAuthenticatorAddress}`);
 
   // 1. GET /supported
   console.log(`\n[1/4] GET /supported`);
@@ -106,8 +145,7 @@ async function main() {
 
   // 2. POST /submit (ASSOCIATEKEY)
   console.log(`\n[2/4] POST /submit (ASSOCIATEKEY)`);
-  const keyPair = await generateKeyPair();
-  const pubKeyHex = await exportPublicKeyToHex(keyPair.publicKey);
+  const pubKeyHex = await exportPublicKeyToHex(buyerKeyPair.publicKey);
   const rawPayload = hexToBytes(pubKeyHex);
   const assoc = await client.submit({
     requestType: REQUEST_TYPE_ASSOCIATEKEY,
@@ -118,7 +156,17 @@ async function main() {
   if (assoc.status !== 200) {
     throw new Error(`POST /submit failed: ${assoc.status} ${JSON.stringify(assoc.body)}`);
   }
-  console.log(`      -> requestId=${assoc.body.requestId}`);
+  const assocRequestId = assoc.body.requestId as string;
+  console.log(`      -> requestId=${assocRequestId}`);
+  console.log(`      waiting for RequestCompleted...`);
+  const assocResult = await waitForRequestCompleted(velaClient, assocRequestId);
+  if (assocResult.status !== 0n) {
+    throw new Error(
+      `ASSOCIATEKEY request failed on-chain: status=${assocResult.status} ` +
+      `errorCode=${assocResult.errorCode} errorMessage="${assocResult.errorMessage}"`,
+    );
+  }
+  console.log(`      -> completed (status=0)`);
 
   // 3. POST /verify  &&  4. POST /settle
   const requirements: PaymentRequirements = {
@@ -145,8 +193,19 @@ async function main() {
     throw new Error(`POST /settle failed: ${settle.status} ${JSON.stringify(settle.body)}`);
   }
   console.log(`      -> success=${settle.body.success} payer=${settle.body.payer}`);
-  const requestId = (settle.body.extensions as Record<string, string> | undefined)?.requestId;
-  if (requestId) console.log(`      -> requestId=${requestId}`);
+  const settleRequestId = (settle.body.extensions as Record<string, string> | undefined)?.requestId;
+  if (settleRequestId) {
+    console.log(`      -> requestId=${settleRequestId}`);
+    console.log(`      waiting for RequestCompleted...`);
+    const settleResult = await waitForRequestCompleted(velaClient, settleRequestId);
+    if (settleResult.status !== 0n) {
+      throw new Error(
+        `Settle request failed on-chain: status=${settleResult.status} ` +
+        `errorCode=${settleResult.errorCode} errorMessage="${settleResult.errorMessage}"`,
+      );
+    }
+    console.log(`      -> completed (status=0)`);
+  }
 
   console.log(`\nAll steps OK.\n`);
 }

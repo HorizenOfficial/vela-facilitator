@@ -5,7 +5,7 @@ import { Config } from "../config.js";
 // Minimal ABI for submitRequestFor
 const PROCESSOR_ENDPOINT_ABI = [
   "function submitRequestFor(address sender, uint8 protocolVersion, uint64 applicationId, uint8 requestType, bytes payload, address tokenAddress, uint256 assetAmount, uint256 deadline, bytes requestSignature, bytes depositPermit) payable returns (bytes32)",
-  "event RequestSubmitted(bytes32 indexed requestId, address indexed sender, address indexed facilitator, uint64 applicationId, uint8 requestType)",
+  "event RequestSubmitted(uint64 indexed applicationId, bytes32 indexed requestId, address indexed sender, address facilitator)",
 ];
 
 // Request type constants (mirrors Solidity enum)
@@ -74,10 +74,12 @@ export function createSubmitRouter(config: Config, signer: ethers.Signer): Route
       const payloadBytes = ethers.getBytes(payload);
       const tokenAddr = tokenAddress ?? ethers.ZeroAddress;
 
+      const applicationIdBig = BigInt(applicationId);
+
       const tx = await endpoint.submitRequestFor(
         sender,
         protocolVersion,
-        applicationId,
+        applicationIdBig,
         requestType,
         payloadBytes,
         tokenAddr,
@@ -97,16 +99,21 @@ export function createSubmitRouter(config: Config, signer: ethers.Signer): Route
 
       // Extract requestId from RequestSubmitted event
       let requestId: string | undefined;
+      console.log(`POST /submit tx mined: ${receipt.hash} (${receipt.logs.length} logs)`);
       for (const log of receipt.logs) {
         try {
           const parsed = endpoint.interface.parseLog(log);
           if (parsed && parsed.name === "RequestSubmitted") {
-            requestId = parsed.args[0] as string;
+            requestId = parsed.args.requestId as string;
+            console.log(`POST /submit requestId=${requestId}`);
             break;
           }
         } catch {
           // not our event
         }
+      }
+      if (!requestId) {
+        console.warn(`POST /submit: RequestSubmitted event not found in ${receipt.logs.length} logs`);
       }
 
       res.json({ requestId: requestId ?? null, txHash: receipt.hash });

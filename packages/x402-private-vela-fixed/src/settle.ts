@@ -7,7 +7,7 @@ import { VelaPaymentPayload, VelaSchemeConfig } from "./types.js";
 // Minimal ABI for submitRequestFor
 const PROCESSOR_ENDPOINT_ABI = [
   "function submitRequestFor(address sender, uint8 protocolVersion, uint64 applicationId, uint8 requestType, bytes payload, address tokenAddress, uint256 assetAmount, uint256 deadline, bytes requestSignature, bytes depositPermit) payable returns (bytes32)",
-  "event RequestSubmitted(bytes32 indexed requestId, address indexed sender, address indexed facilitator, uint64 applicationId, uint8 requestType)",
+  "event RequestSubmitted(uint64 indexed applicationId, bytes32 indexed requestId, address indexed sender, address facilitator)",
 ];
 
 /**
@@ -94,7 +94,7 @@ export async function settlePayment(
     try {
       const parsed = endpoint.interface.parseLog(log);
       if (parsed && parsed.name === "RequestSubmitted") {
-        requestId = parsed.args[0] as string;
+        requestId = parsed.args.requestId as string;
         break;
       }
     } catch {

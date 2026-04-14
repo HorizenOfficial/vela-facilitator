@@ -32,6 +32,8 @@ export interface FacilitatorClientConfig {
   chainId: number;
   teePublicKeyHex: string;
   facilitatorUrl: string;
+  applicationId?: bigint;
+  buyerP521PrivateKey?: CryptoKey;  // buyer's registered P-521 key (for ECIES encryption)
 }
 
 export interface HttpResponse<T = Record<string, unknown>> {
@@ -51,6 +53,8 @@ export class FacilitatorClient {
   private readonly chainId: number;
   private readonly teePublicKeyHex: string;
   private readonly facilitatorUrl: string;
+  private readonly applicationId: bigint;
+  private readonly buyerP521PrivateKey?: CryptoKey;
 
   constructor(config: FacilitatorClientConfig) {
     this.wallet = config.wallet.connect(config.provider);
@@ -60,6 +64,8 @@ export class FacilitatorClient {
     this.chainId = config.chainId;
     this.teePublicKeyHex = config.teePublicKeyHex;
     this.facilitatorUrl = config.facilitatorUrl;
+    this.applicationId = config.applicationId ?? 1n;
+    this.buyerP521PrivateKey = config.buyerP521PrivateKey;
   }
 
   get address(): string {
@@ -193,7 +199,7 @@ export class FacilitatorClient {
     const deadline = params.deadline ?? BigInt(Math.floor(Date.now() / 1000) + 300);
     const tokenAddress = params.tokenAddress ?? ethers.ZeroAddress;
     const assetAmount = params.assetAmount ?? 0n;
-    const applicationId = params.applicationId ?? 1n;
+    const applicationId = params.applicationId ?? this.applicationId;
     const PROTOCOL_VERSION = 0;
 
     const domainSeparator = this.getDomainSeparatorHash();
@@ -295,9 +301,9 @@ export class FacilitatorClient {
    * Encrypt a JSON payload with the TEE's P-521 public key using real ECIES.
    */
   async encryptPayload(plaintext: Uint8Array): Promise<Uint8Array> {
-    const buyerKeyPair = await generateKeyPair();
+    const privateKey = this.buyerP521PrivateKey ?? (await generateKeyPair()).privateKey;
     const teePublicKey = await importPublicKeyFromHex(this.teePublicKeyHex);
-    return encrypt(buyerKeyPair.privateKey, teePublicKey, plaintext);
+    return encrypt(privateKey, teePublicKey, plaintext);
   }
 
   /**
@@ -309,11 +315,13 @@ export class FacilitatorClient {
     invoice_id?: string;
     asset: string;
   }): Promise<Uint8Array> {
+    // vela-nova TEE expects amount as a lowercase 0x-prefixed hex string
+    const amountHex = "0x" + BigInt(params.amount).toString(16);
     const instructions: PayloadInstructions = {
       type: "transfer",
       transfer: {
         to: params.to,
-        amount: params.amount,
+        amount: amountHex,
         invoice_id: params.invoice_id ?? "",
         asset: params.asset
       },
@@ -358,7 +366,7 @@ export class FacilitatorClient {
     return {
       sender: this.wallet.address,
       protocolVersion: authorization.protocolVersion,
-      applicationId: Number(authorization.applicationId),
+      applicationId: String(authorization.applicationId),
       requestType: authorization.requestType,
       payload: ethers.hexlify(params.payload),
       tokenAddress: authorization.tokenAddress,

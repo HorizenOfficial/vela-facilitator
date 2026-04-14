@@ -28,6 +28,7 @@ export interface VelaClientConfig {
   teePublicKey: CryptoKey;       // TEE's P-521 public key (to encrypt payload for TEE)
   rpcUrl: string;
   contractAddress: string;       // ProcessorEndpoint contract address
+  applicationId?: bigint;        // vela-nova application ID (defaults to 1n)
 }
 
 /**
@@ -63,11 +64,13 @@ export async function signPayment(
 
   // 2. Build vela-nova transfer payload
   // TODO: "asset" field to be confirmed after ERC-20 support addition on vela and vela-nove
+  // vela-nova TEE expects amount as a lowercase 0x-prefixed hex string
+  const amountHex = "0x" + BigInt(requirements.amount).toString(16);
   const payloadInstructions: PayloadInstructions = {
     type: "transfer",
     transfer: {
       to: requirements.payTo,
-      amount: requirements.amount,
+      amount: amountHex,
       invoice_id: invoiceId,
       asset: requirements.asset
     },
@@ -79,8 +82,7 @@ export async function signPayment(
   const payloadHex = ethers.hexlify(encrypted);
   const payloadHash = ethers.keccak256(encrypted);
 
-  // Application ID: comes from requirements or defaults
-  const applicationId = 1n; // vela-nova app ID, hardcoded for x402 flow
+  const applicationId = config.applicationId ?? 1n;
 
   // 4. Build EIP-712 domain separator
   const domainSeparator = ethers.keccak256(

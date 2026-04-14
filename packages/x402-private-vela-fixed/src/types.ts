@@ -16,7 +16,7 @@ export type SupportedRequestType =
 // ============================================================================
 
 export const EIP712_DOMAIN_NAME = "Vela" as const;
-export const EIP712_DOMAIN_VERSION = "1" as const;
+export const EIP712_DOMAIN_VERSION = "0" as const;
 
 export const REQUEST_AUTHORIZATION_TYPEHASH =
   "RequestAuthorization(address sender,uint8 protocolVersion,uint64 applicationId,uint8 requestType,bytes32 payloadHash,address tokenAddress,uint256 assetAmount,uint256 nonce,uint256 deadline)";
