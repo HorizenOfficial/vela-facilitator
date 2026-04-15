@@ -98,10 +98,20 @@ export interface VelaSchemeConfig {
  * This JSON is encrypted with the TEE's P-521 public key before submission.
  */
 export interface TransferInstruction {
-  to: string;       // recipient address
-  amount: string;   // amount in token units (string to avoid BigInt serialization issues)
-  invoice_id: string; // max 100 chars, correlates payment to seller's invoice
-  asset: string; // token ID of the asset to move (NOTE: this is not present currently on Nova! will be added after ERC-20 support)
+  to: string;              // recipient address
+  tokenAddress?: string;   // token address (omit for ETH = 0x0)
+  amount: string;          // hex Uint256 (e.g. "0x6f05b59d3b20000")
+  invoice_id?: string;     // optional, max 100 chars, correlates payment to seller's invoice
+}
+
+/**
+ * Withdraw instruction for vela-nova private withdrawals.
+ * This JSON is encrypted with the TEE's P-521 public key before submission.
+ */
+export interface WithdrawInstruction {
+  to: string;              // destination address (on-chain recipient)
+  tokenAddress?: string;   // token address (omit for ETH = 0x0)
+  amount: string;          // hex Uint256
 }
 
 /**
@@ -109,6 +119,7 @@ export interface TransferInstruction {
  * The payload submitted to the ProcessorEndpoint for a PROCESS request.
  */
 export interface PayloadInstructions {
-  type: "transfer";
-  transfer: TransferInstruction;
+  type: "transfer" | "withdraw";
+  transfer?: TransferInstruction;
+  withdraw?: WithdrawInstruction;
 }

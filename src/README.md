@@ -110,7 +110,8 @@ curl -X POST http://localhost:3000/verify \
 
 ## POST /settle
 
-Settles an x402 payment on-chain by calling `submitRequestFor()` on the `ProcessorEndpoint` contract. Settlement is **asynchronous** — a successful response means the transaction was submitted, not that the TEE has processed it.
+Settles an x402 payment on-chain by calling `submitRequestFor()` on the `ProcessorEndpoint` contract. 
+Settlement is **asynchronous** — a successful response means the transaction was submitted, not that the TEE has processed it.
 
 **Request body**: same shape as `/verify`
 

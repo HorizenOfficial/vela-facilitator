@@ -313,7 +313,7 @@ export class FacilitatorClient {
     to: string;
     amount: string;
     invoice_id?: string;
-    asset: string;
+    tokenAddress?: string;
   }): Promise<Uint8Array> {
     // vela-nova TEE expects amount as a lowercase 0x-prefixed hex string
     const amountHex = "0x" + BigInt(params.amount).toString(16);
@@ -321,9 +321,30 @@ export class FacilitatorClient {
       type: "transfer",
       transfer: {
         to: params.to,
+        tokenAddress: params.tokenAddress,
         amount: amountHex,
-        invoice_id: params.invoice_id ?? "",
-        asset: params.asset
+        invoice_id: params.invoice_id,
+      },
+    };
+    const plaintext = new TextEncoder().encode(JSON.stringify(instructions));
+    return this.encryptPayload(plaintext);
+  }
+
+  /**
+   * Build a vela-nova withdraw payload and encrypt it.
+   */
+  async buildWithdrawPayload(params: {
+    to: string;
+    amount: string;
+    tokenAddress?: string;
+  }): Promise<Uint8Array> {
+    const amountHex = "0x" + BigInt(params.amount).toString(16);
+    const instructions: PayloadInstructions = {
+      type: "withdraw",
+      withdraw: {
+        to: params.to,
+        tokenAddress: params.tokenAddress,
+        amount: amountHex,
       },
     };
     const plaintext = new TextEncoder().encode(JSON.stringify(instructions));
@@ -381,14 +402,29 @@ export class FacilitatorClient {
 
   /**
    * Build an x402 PaymentPayload for the facilitator (without sending it).
+   *
+   * By default the on-chain `assetAmount` (deposit pulled from the buyer via permit)
+   * equals `requirements.amount`, i.e. the settle performs deposit+transfer in one tx.
+   *
+   * Pass `assetAmount: 0n` to skip the on-chain deposit when the buyer has already
+   * deposited funds into their private balance (the transfer becomes a pure
+   * private-state operation).
    */
   async buildX402Payload(params: {
     requirements: PaymentRequirements;
     x402Version?: number;
+    assetAmount?: bigint;
   }): Promise<PaymentPayload> {
     const req = params.requirements;
-    const assetAmount = BigInt(req.amount);
-    const tokenAddress = assetAmount > 0n ? this.tokenAddress : ethers.ZeroAddress;
+    const privateAmount = BigInt(req.amount);
+    const assetAmount = params.assetAmount ?? privateAmount;
+    // On-chain tokenAddress: must be ZeroAddress when assetAmount=0 (ProcessorEndpoint
+    // reverts with InvalidValue otherwise). Real token is only present when we're also
+    // performing an on-chain deposit as part of this settle.
+    const onChainTokenAddress = assetAmount > 0n ? this.tokenAddress : ethers.ZeroAddress;
+    // Private-state tokenAddress: always the real token (the TEE needs it to identify
+    // which private balance to debit/credit).
+    const privateTokenAddress = privateAmount > 0n ? this.tokenAddress : ethers.ZeroAddress;
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 300);
 
     const invoiceId = (req.extra as Record<string, string>)?.invoiceId ?? "";
@@ -396,7 +432,7 @@ export class FacilitatorClient {
       to: req.payTo,
       amount: req.amount,
       invoice_id: invoiceId,
-      asset: tokenAddress
+      tokenAddress: privateTokenAddress,
     });
 
     const payloadHex = ethers.hexlify(payloadBytes);
@@ -405,7 +441,7 @@ export class FacilitatorClient {
     const { signature: requestSignature, authorization } = await this.signRequestAuthorization({
       requestType: REQUEST_TYPE_PROCESS,
       payloadHash,
-      tokenAddress,
+      tokenAddress: onChainTokenAddress,
       assetAmount,
       deadline,
     });

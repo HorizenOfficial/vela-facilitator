@@ -63,16 +63,15 @@ export async function signPayment(
   const tokenAddress = assetAmount > 0n ? requirements.asset : ethers.ZeroAddress;
 
   // 2. Build vela-nova transfer payload
-  // TODO: "asset" field to be confirmed after ERC-20 support addition on vela and vela-nove
   // vela-nova TEE expects amount as a lowercase 0x-prefixed hex string
   const amountHex = "0x" + BigInt(requirements.amount).toString(16);
   const payloadInstructions: PayloadInstructions = {
     type: "transfer",
     transfer: {
       to: requirements.payTo,
+      tokenAddress: requirements.asset,
       amount: amountHex,
       invoice_id: invoiceId,
-      asset: requirements.asset
     },
   };
 
