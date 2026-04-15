@@ -9,6 +9,7 @@ The facilitator acts as a gas relay: users sign EIP-712 typed messages and the f
 - **`POST /submit`** — Application-agnostic gasless submission. Accepts any `ASSOCIATEKEY` or `PROCESS` request signed by the user and submits it to the `ProcessorEndpoint` contract.
 - **`POST /verify`** — x402 off-chain payment verification.
 - **`POST /settle`** — x402 on-chain settlement (calls `submitRequestFor()` on-chain).
+- **`POST /claim`** — Permissionless claim: calls `claim(tokenAddress, payee)` on `ProcessorEndpoint`. Anyone can trigger the claim — funds always go to `payee`.
 - **`GET /supported`** — Returns the list of supported x402 schemes and networks.
 
 ## Architecture
@@ -19,7 +20,8 @@ The facilitator acts as a gas relay: users sign EIP-712 typed messages and the f
 │  ┌─────────────────────────────────┐  │
 │  │       Express HTTP server        │  │
 │  │  POST /submit  POST /verify     │  │
-│  │  POST /settle  GET /supported   │  │
+│  │  POST /settle  POST /claim      │  │
+│  │  GET  /supported                │  │
 │  └──────────────┬──────────────────┘  │
 │                 │                     │
 │  ┌──────────────▼──────────────────┐  │
@@ -47,7 +49,8 @@ vela-facilitator/
 │   ├── config.ts          # Environment variable config
 │   └── routes/
 │       ├── x402.ts        # GET /supported, POST /verify, POST /settle
-│       └── submit.ts      # POST /submit
+│       ├── submit.ts      # POST /submit
+│       └── claim.ts       # POST /claim
 ├── packages/
 │   ├── x402-private-vela-fixed/   # x402 scheme package (publishable)
 │   │   └── src/

@@ -145,6 +145,19 @@ export class FacilitatorClient {
     return this.get("/supported");
   }
 
+  /**
+   * Trigger a pending-claim release via POST /claim.
+   * Calls `ProcessorEndpoint.claim(tokenAddress, payee)` on-chain (facilitator pays gas).
+   * Permissionless: anyone can claim for any `payee` — funds always go to `payee`.
+   * Returns `amount = "0"` when there was nothing pending.
+   */
+  async claim(params: { tokenAddress: string; payee: string }): Promise<HttpResponse> {
+    return this.post("/claim", {
+      tokenAddress: params.tokenAddress,
+      payee: params.payee,
+    });
+  }
+
   // ---------------------------------------------------------------------------
   // On-chain reads
   // ---------------------------------------------------------------------------

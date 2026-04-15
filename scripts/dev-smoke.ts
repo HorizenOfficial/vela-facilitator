@@ -8,7 +8,8 @@
  *   4. Buyer deposits AMOUNT tokens via POST /submit (PROCESS + EIP-2612 permit).
  *   5. Buyer transfers AMOUNT to seller via POST /verify + /settle (x402).
  *   6. Seller withdraws AMOUNT via POST /submit (PROCESS with encrypted withdraw payload).
- *   7. Verify the seller's on-chain ERC-20 balance grew by AMOUNT, and read the
+ *   7. Seller CLAIM: POST /claim to release the pending withdrawal into the seller's wallet.
+ *   8. Verify the seller's on-chain ERC-20 balance grew by AMOUNT, and read the
  *      seller's encrypted events from the subgraph + decrypt them to confirm the
  *      final private balance is 0.
  *
@@ -330,8 +331,47 @@ async function main() {
   await waitForRequestCompleted(funderVelaClient, withdrawReqId, "WITHDRAW");
   console.log(`    withdraw completed.`);
 
-  // --- step 6: verify seller's on-chain balance + subgraph events -------
-  console.log(`\n[6] Verify seller balance`);
+  // --- diagnostic: inspect pendingClaims + Withdrawal events -----------
+  const processorDebug = new ethers.Contract(
+    contractAddress,
+    [
+      "function pendingClaims(address,address) view returns (uint256)",
+      "event Withdrawal(uint64 indexed applicationId, bytes32 indexed requestId, address indexed receiver, address tokenAddress, uint256 amount)",
+    ],
+    provider,
+  );
+  const pendingForSeller: bigint = await processorDebug.pendingClaims(tokenAddress, sellerWallet.address);
+  const pendingForSellerEth: bigint = await processorDebug.pendingClaims(ethers.ZeroAddress, sellerWallet.address);
+  console.log(`    pendingClaims[TOKEN][seller] = ${pendingForSeller}`);
+  console.log(`    pendingClaims[ETH][seller]   = ${pendingForSellerEth}`);
+  // Query recent Withdrawal events for this requestId
+  const wFilter = processorDebug.filters.Withdrawal(undefined, withdrawReqId);
+  const wEvents = await processorDebug.queryFilter(wFilter);
+  console.log(`    Withdrawal events for withdraw requestId (${wEvents.length}):`);
+  for (const ev of wEvents as ethers.EventLog[]) {
+    console.log(`      receiver=${ev.args.receiver} token=${ev.args.tokenAddress} amount=${ev.args.amount}`);
+  }
+
+  // --- step 6: Seller CLAIM pending balance ----------------------------
+  // The withdraw puts tokens in `pendingClaims[token][seller]` on-chain; the seller must
+  // call claim() to move them into its wallet. Anyone can trigger it (funds always go to
+  // the seller), so we use the facilitator's permissionless /claim endpoint.
+  console.log(`\n[6] Seller CLAIM pending balance`);
+  const claimRes = await sellerClient.claim({ tokenAddress, payee: sellerWallet.address });
+  if (claimRes.status !== 200) {
+    throw new Error(`/claim failed: ${claimRes.status} ${JSON.stringify(claimRes.body)}`);
+  }
+  console.log(claimRes);
+  const claimedAmount = claimRes.body.amount as string;
+  console.log(`    /claim -> tx=${claimRes.body.txHash} amount=${claimedAmount}`);
+  if (BigInt(claimedAmount) !== amount) {
+    throw new Error(
+      `Claim amount mismatch: expected ${amount}, got ${claimedAmount}`,
+    );
+  }
+
+  // --- step 7: verify seller's on-chain balance ------------------------
+  console.log(`\n[7] Verify seller balance`);
   const sellerBalFinal: bigint = await tokenReader.balanceOf(sellerWallet.address);
   console.log(`    seller on-chain balance: ${sellerBalInitial} -> ${sellerBalFinal}`);
   if (sellerBalFinal !== sellerBalInitial + amount) {
@@ -342,15 +382,20 @@ async function main() {
   console.log(`    seller balance increased by AMOUNT (${amount}) as expected.`);
 
   // Decrypt seller's private events via subgraph to confirm private-state changes.
-  console.log(`\n[7] Decrypt seller's events via subgraph`);
+  // eventSubType is declared `string indexed` in the ProcessorEndpoint contract, so the
+  // topic (and subgraph `Bytes` field) is keccak256(utf8Bytes(name)), not the name itself.
+  console.log(`\n[8] Decrypt seller's events via subgraph`);
   const subgraph = createSubgraphClient(subgraphUrl);
   const teePublicKey = await importPublicKeyFromHex(teePublicKeyHex);
+  const subtypeHashes = ["transfer_received", "withdrawal"].map((n) =>
+    ethers.keccak256(ethers.toUtf8Bytes(n)),
+  );
   const sellerDecrypted = await fetchAndDecryptUserEvents(
     subgraph,
     teePublicKey,
     sellerKeyPair.privateKey,
     applicationId,
-    ["transfer_received", "withdrawal"],
+    subtypeHashes,
     0,
   );
   const sellerEvents = sellerDecrypted.map((b) => JSON.parse(bytesToString(b)));

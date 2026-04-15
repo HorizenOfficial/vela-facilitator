@@ -4,8 +4,9 @@
 
 The vela-facilitator is a platform-level TypeScript service that submits Vela blockchain requests on behalf of users who don't hold ETH (gasless submission). Defined in [FACILITATOR.md](https://github.com/HorizenOfficial/vela/blob/main/docs/design/FACILITATOR.md) section 5.3, it has two layers:
 
-1. **Core facilitation** — POST /submit (generic, non-x402). Can submit requests to **any application** on the Vela chain. 
+1. **Core facilitation** — POST /submit (generic, non-x402). Can submit requests to **any application** on the Vela chain.
 2. **x402 scheme** — POST /verify, POST /settle, GET /supported (standard Coinbase x402 protocol). Specifically targets the x402 payment standard by defining a custom payment scheme and endpoints compatible with the standrd. This part assumes a specific Vela app is used for the transfers [**vela-nova private transfer app**](https://github.com/HorizenOfficial/vela-nova).
+3. **Pending claims** — POST /claim (permissionless). Triggers `ProcessorEndpoint.claim(tokenAddress, payee)` on-chain. Funds always go to `payee`, so anyone can push the claim; the facilitator pays the gas.
 
 The design uses EIP-2612 (`permit`) for deposit authorization and EIP-712 for request authorization. 
 Only `ASSOCIATEKEY` and `PROCESS` request types are supported.
@@ -70,8 +71,9 @@ The diagram below shows the full x402 flow with all three components using the `
 │  ┌────────────────────┐    └────────────┬───────────────┘               │
 │  │ Core routes        │                 │                               │
 │  │  POST /submit      │    ┌─────────────────────┐                      │
-│  │  (app-agnostic)    │    │  x402Facilitator    │                      │
-│  └────────┬───────────┘    │  (from @x402/core)  │                      │
+│  │  POST /claim       │    │  x402Facilitator    │                      │
+│  │  (app-agnostic)    │    │  (from @x402/core)  │                      │
+│  └────────┬───────────┘    │                     │                      │
 │           │                └────────────┬────────┘                      │
 │           │                             │                               │
 │           │                             ▼                               │
@@ -195,6 +197,25 @@ The resource server automatically:
 
 The seller is responsible for checking the `invoice_id` in the TEE event after processing — the facilitator cannot verify it (see "Settle Semantics" above).
 
+## Pending Claims (POST /claim)
+
+The `ProcessorEndpoint` contract accumulates **pending claims** per `(tokenAddress, payee)` pair — for example, refunds from failed requests, or withdrawals returned to the user's on-chain wallet. These funds are released by calling `claim(tokenAddress, payee)` on-chain, which transfers the entire pending balance to `payee` and emits `PaymentWithdrawn`.
+
+The `/claim` route is a thin wrapper around this call. It is **permissionless**: anyone can trigger a claim for any `payee` because the on-chain contract always sends the funds to `payee` regardless of who submitted the transaction. The facilitator simply pays the gas.
+
+```typescript
+// src/routes/claim.ts (simplified)
+router.post("/claim", async (req, res) => {
+  const { tokenAddress, payee } = req.body;
+  const tx = await endpoint.claim(tokenAddress, payee); // facilitator signs + pays gas
+  const receipt = await tx.wait();
+  // amount extracted from PaymentWithdrawn event ("0" if nothing pending)
+  res.json({ txHash: receipt.hash, amount });
+});
+```
+
+Because claims go directly to `payee`, no authentication is needed and no signing by `payee` is required. This makes `/claim` a useful gasless finalizer for users who have pending balances but no ETH to call `claim()` themselves.
+
 ## x402 Client Integration (Buyer)
 
 The client-side scheme handles all vela-nova specific logic:
@@ -262,7 +283,8 @@ vela-facilitator/
 │   ├── config.ts                       # Configuration (RPC URL, contract addr, private key, etc.)
 │   └── routes/
 │       ├── x402.ts                     # Standard x402 endpoints: POST /verify, POST /settle, GET /supported
-│       └── submit.ts                   # POST /submit (core, non-x402)
+│       ├── submit.ts                   # POST /submit (core, non-x402)
+│       └── claim.ts                    # POST /claim (permissionless claim of pending balances)
 │
 ├── mock/                               # Mock infrastructure
 │   ├── anvil.ts                        # Anvil process management (start/stop/health check)

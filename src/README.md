@@ -231,6 +231,50 @@ curl -X POST http://localhost:3000/submit \
 
 ---
 
+## POST /claim
+
+Permissionless claim of any pending balance held for `payee` by the `ProcessorEndpoint` contract. Calls `claim(tokenAddress, payee)` on-chain; the facilitator pays gas.
+
+**Anyone can call this endpoint** — the contract always transfers funds to `payee`, so there is no authentication risk. If there is nothing to claim, `claim()` is a no-op and the response returns `amount: "0"`.
+
+**Request body**:
+```json
+{
+  "tokenAddress": "0xTOKEN_ADDRESS",
+  "payee": "0xPAYEE_ADDRESS"
+}
+```
+
+- `tokenAddress`: ERC-20 address, or `0x0000000000000000000000000000000000000000` for ETH
+- `payee`: the address that will receive the pending balance
+
+**Response** `200 OK`:
+```json
+{
+  "txHash": "0xTX_HASH",
+  "amount": "1000000"
+}
+```
+
+`amount` is read from the `PaymentWithdrawn` event. It is `"0"` when there was nothing pending for `(tokenAddress, payee)`.
+
+**Response** `400 Bad Request`:
+```json
+{ "error": "Missing or invalid payee" }
+```
+
+**Example**:
+```bash
+curl -X POST http://localhost:3000/claim \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tokenAddress": "0xTOKEN_ADDRESS",
+    "payee": "0xPAYEE_ADDRESS"
+  }'
+```
+
+---
+
 ## EIP-712 signing
 
 All requests use EIP-712 typed data signing. The domain and type hash:
