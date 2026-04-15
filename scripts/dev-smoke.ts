@@ -331,27 +331,6 @@ async function main() {
   await waitForRequestCompleted(funderVelaClient, withdrawReqId, "WITHDRAW");
   console.log(`    withdraw completed.`);
 
-  // --- diagnostic: inspect pendingClaims + Withdrawal events -----------
-  const processorDebug = new ethers.Contract(
-    contractAddress,
-    [
-      "function pendingClaims(address,address) view returns (uint256)",
-      "event Withdrawal(uint64 indexed applicationId, bytes32 indexed requestId, address indexed receiver, address tokenAddress, uint256 amount)",
-    ],
-    provider,
-  );
-  const pendingForSeller: bigint = await processorDebug.pendingClaims(tokenAddress, sellerWallet.address);
-  const pendingForSellerEth: bigint = await processorDebug.pendingClaims(ethers.ZeroAddress, sellerWallet.address);
-  console.log(`    pendingClaims[TOKEN][seller] = ${pendingForSeller}`);
-  console.log(`    pendingClaims[ETH][seller]   = ${pendingForSellerEth}`);
-  // Query recent Withdrawal events for this requestId
-  const wFilter = processorDebug.filters.Withdrawal(undefined, withdrawReqId);
-  const wEvents = await processorDebug.queryFilter(wFilter);
-  console.log(`    Withdrawal events for withdraw requestId (${wEvents.length}):`);
-  for (const ev of wEvents as ethers.EventLog[]) {
-    console.log(`      receiver=${ev.args.receiver} token=${ev.args.tokenAddress} amount=${ev.args.amount}`);
-  }
-
   // --- step 6: Seller CLAIM pending balance ----------------------------
   // The withdraw puts tokens in `pendingClaims[token][seller]` on-chain; the seller must
   // call claim() to move them into its wallet. Anyone can trigger it (funds always go to
