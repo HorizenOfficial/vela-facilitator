@@ -8,17 +8,16 @@ import { createClaimRouter } from "./routes/claim.js";
 import type { ethers } from "ethers";
 import type { Config } from "./config.js";
 
-export function createApp(config: Config, provider: ethers.JsonRpcProvider): express.Express {
+export async function createApp(config: Config, provider: ethers.JsonRpcProvider): Promise<express.Express> {
   const signer = config.signer.connect(provider);
 
   const facilitator = new x402Facilitator();
-  registerPrivateVelaFixedScheme(facilitator, {
+  await registerPrivateVelaFixedScheme(facilitator, {
     rpcUrl: config.rpcUrl,
     contractAddress: config.contractAddress,
     signer,
     maxFeeValue: config.maxFeeValue,
     applicationId: config.applicationId,
-    network: config.network,
     appEventPollIntervalMs: config.appEventPollIntervalMs,
     appEventPollTimeoutMs: config.appEventPollTimeoutMs,
   });

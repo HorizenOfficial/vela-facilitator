@@ -18,10 +18,9 @@ Copy `.env.template` to `.env` and set the required variables:
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `RPC_URL` | yes | | Ethereum JSON-RPC endpoint |
+| `RPC_URL` | yes | | Ethereum JSON-RPC endpoint. The chain ID is derived from it at startup. |
 | `FACILITATOR_PRIVATE_KEY` | yes | | Hex private key of the facilitator wallet (pays gas) |
 | `PROCESSOR_ENDPOINT_ADDRESS` | yes | | `ProcessorEndpoint` contract address |
-| `CHAIN_ID` | yes | | EVM chain ID |
 | `MAX_FEE_VALUE` | no | `50` | ETH in wei sent as `msg.value` for service fees |
 | `VELA_NOVA_APPLICATION_ID` | no | `1` | vela-nova application ID for x402 payments |
 | `PORT` | no | `3000` | HTTP server port |

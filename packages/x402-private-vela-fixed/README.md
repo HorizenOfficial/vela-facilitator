@@ -30,13 +30,13 @@ import { ethers } from "ethers";
 
 const facilitator = new x402Facilitator();
 
-registerPrivateVelaFixedScheme(facilitator, {
+// Returns a Promise: the CAIP-2 network is derived from the RPC's chainId.
+await registerPrivateVelaFixedScheme(facilitator, {
   rpcUrl: "https://rpc.vela.network",
   contractAddress: "0x<ProcessorEndpoint address>",
   signer: new ethers.Wallet(process.env.FACILITATOR_PRIVATE_KEY!),
   maxFeeValue: 0n,          // ETH in wei for service fees
   applicationId: 1n,        // vela-nova app ID
-  network: "eip155:2651420",
   // Optional: how long `/settle` waits for the TEE AppEvent (defaults 2s / 60s).
   appEventPollIntervalMs: 2_000,
   appEventPollTimeoutMs: 60_000,
@@ -49,12 +49,11 @@ The facilitator will handle `POST /verify` and `POST /settle` for the `private-v
 
 | Field | Type | Description |
 |---|---|---|
-| `rpcUrl` | `string` | Ethereum JSON-RPC URL |
+| `rpcUrl` | `string` | Ethereum JSON-RPC URL. The CAIP-2 network identifier (`eip155:<chainId>`) is derived from this at registration time. |
 | `contractAddress` | `string` | `ProcessorEndpoint` contract address |
 | `signer` | `ethers.Signer` | Facilitator wallet (pays gas) |
 | `maxFeeValue` | `bigint` | ETH in wei sent as `msg.value` for service fees |
 | `applicationId` | `bigint` | vela-nova application ID |
-| `network` | `string` | CAIP-2 network (e.g. `"eip155:2651420"`) |
 | `appEventPollIntervalMs` | `number?` | Poll interval for the TEE `AppEvent` (default `2000`) |
 | `appEventPollTimeoutMs` | `number?` | Timeout before `/settle` returns `tee_processing_timeout` (default `60000`) |
 
@@ -71,13 +70,13 @@ import { ethers } from "ethers";
 
 const client = new x402Client("https://my-facilitator.example.com");
 
-registerPrivateVelaFixedClient(client, {
+// Returns a Promise: the CAIP-2 network is derived from the RPC's chainId.
+await registerPrivateVelaFixedClient(client, {
   signer: buyerSigner,           // ethers.Signer for EIP-712 + EIP-2612
   p521PrivateKey: buyerP521Key,  // buyer's P-521 CryptoKey (from vela-common-ts)
   teePublicKey: teeP521Key,      // TEE's P-521 CryptoKey (from ProcessorEndpoint.getPubSecp521r1())
   rpcUrl: "https://rpc.vela.network",
   contractAddress: "0x<ProcessorEndpoint address>",
-  network: "eip155:2651420",
 });
 
 // Automatically handles 402 responses:
@@ -99,9 +98,10 @@ When the resource server returns a `402 Payment Required`, the client:
 | `signer` | `ethers.Signer` | Buyer's Ethereum signer |
 | `p521PrivateKey` | `CryptoKey` | Buyer's P-521 ECDH private key |
 | `teePublicKey` | `CryptoKey` | TEE's P-521 ECDH public key |
-| `rpcUrl` | `string` | Ethereum JSON-RPC URL |
+| `rpcUrl` | `string` | Ethereum JSON-RPC URL. The CAIP-2 network identifier is derived from this. |
 | `contractAddress` | `string` | `ProcessorEndpoint` contract address |
-| `network` | `string` | CAIP-2 network identifier |
+| `applicationId` | `bigint?` | vela-nova application ID (defaults to `1n`) |
+| `skipOnchainDeposit` | `boolean?` | If `true`, settle is a pure private-state transfer (no on-chain deposit / no permit). The buyer must have already deposited beforehand. Default `false`. |
 
 ---
 

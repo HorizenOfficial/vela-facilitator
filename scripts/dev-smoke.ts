@@ -31,7 +31,6 @@
  * Env vars (defaults match the vela dev stack, override as needed):
  *   FACILITATOR_URL              default: http://localhost:3000
  *   RPC_URL                      default: http://localhost:8545
- *   CHAIN_ID                     default: 31337
  *   PROCESSOR_ENDPOINT_ADDRESS   default: deterministic Anvil deploy address
  *   TEE_AUTHENTICATOR_ADDRESS    default: deterministic Anvil deploy address (TEE P-521 pubkey is read from it)
  *   TOKEN_ADDRESS                default: deterministic MockERC20 deploy address (must support EIP-2612 + public mint())
@@ -77,7 +76,6 @@ function getEnv(name: string, def: string): string {
 const DEFAULTS = {
   FACILITATOR_URL: "http://localhost:3000",
   RPC_URL: "http://localhost:8545",
-  CHAIN_ID: "31337",
   PROCESSOR_ENDPOINT_ADDRESS: "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
   TEE_AUTHENTICATOR_ADDRESS: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
   // MockERC20 deployed by the vela deployer after the ProcessorEndpoint (deployer nonce=4)
@@ -191,7 +189,6 @@ async function main() {
   // --- env --------------------------------------------------------------
   const facilitatorUrl = getEnv("FACILITATOR_URL", DEFAULTS.FACILITATOR_URL);
   const rpcUrl = getEnv("RPC_URL", DEFAULTS.RPC_URL);
-  const chainId = parseInt(getEnv("CHAIN_ID", DEFAULTS.CHAIN_ID), 10);
   const contractAddress = getEnv("PROCESSOR_ENDPOINT_ADDRESS", DEFAULTS.PROCESSOR_ENDPOINT_ADDRESS);
   const teeAuthenticatorAddress = getEnv("TEE_AUTHENTICATOR_ADDRESS", DEFAULTS.TEE_AUTHENTICATOR_ADDRESS);
   const tokenAddress = getEnv("TOKEN_ADDRESS", DEFAULTS.TOKEN_ADDRESS);
@@ -203,6 +200,7 @@ async function main() {
 
   // --- infrastructure ---------------------------------------------------
   const provider = new ethers.JsonRpcProvider(rpcUrl);
+  const chainId = Number((await provider.getNetwork()).chainId);
   const funder = new ethers.Wallet(funderPrivateKey, provider);
   const funderVelaClient = new VelaClient(funder, false, teeAuthenticatorAddress, contractAddress);
 
@@ -309,14 +307,13 @@ async function main() {
   // because the buyer already deposited in step [3] — this is a pure private-state
   // transfer (assetAmount=0 on-chain, no permit).
   const buyerX402 = new x402Client();
-  registerPrivateVelaFixedClient(buyerX402, {
+  await registerPrivateVelaFixedClient(buyerX402, {
     signer: buyerWallet,
     p521PrivateKey: buyerKeyPair.privateKey,
     teePublicKey,
     rpcUrl,
     contractAddress,
     applicationId,
-    network,
     skipOnchainDeposit: true,
   });
   // In a real flow, `paymentRequired` comes from the seller's 402 response.

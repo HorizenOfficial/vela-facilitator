@@ -1,3 +1,4 @@
+import { ethers } from "ethers";
 import { x402Facilitator } from "@x402/core/facilitator";
 import { PrivateVelaFixedScheme } from "./scheme.js";
 import { VelaSchemeConfig } from "./types.js";
@@ -12,21 +13,21 @@ import { VelaSchemeConfig } from "./types.js";
  * @example
  * ```typescript
  * const facilitator = new x402Facilitator();
- * registerPrivateVelaFixedScheme(facilitator, {
+ * await registerPrivateVelaFixedScheme(facilitator, {
  *   rpcUrl: "https://rpc.vela.network",
  *   contractAddress: "0x...",
  *   signer: new ethers.Wallet(privateKey),
  *   maxFeeValue: 1000000000000000n,
  *   applicationId: 1n,
- *   network: "eip155:2651420",
  * });
  * ```
  */
-export function registerPrivateVelaFixedScheme(
+export async function registerPrivateVelaFixedScheme(
   facilitator: x402Facilitator,
   config: VelaSchemeConfig
-): x402Facilitator {
-  const scheme = new PrivateVelaFixedScheme(config);
-  facilitator.register(config.network as any, scheme);
+): Promise<x402Facilitator> {
+  const { chainId } = await new ethers.JsonRpcProvider(config.rpcUrl).getNetwork();
+  const network = `eip155:${chainId}`;
+  facilitator.register(network as any, new PrivateVelaFixedScheme(config));
   return facilitator;
 }

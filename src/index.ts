@@ -5,10 +5,11 @@ import { createApp } from "./app.js";
 async function main() {
   const config = loadConfig();
   const provider = new ethers.JsonRpcProvider(config.rpcUrl);
-  const app = createApp(config, provider);
+  const app = await createApp(config, provider);
 
   const facilitatorAddress = await config.signer.getAddress();
   const balance = await provider.getBalance(facilitatorAddress);
+  const { chainId } = await provider.getNetwork();
   console.log(
     `Facilitator address: ${facilitatorAddress} (balance: ${ethers.formatEther(balance)} ETH)`,
   );
@@ -20,7 +21,7 @@ async function main() {
 
   app.listen(config.port, () => {
     console.log(`vela-facilitator listening on port ${config.port}`);
-    console.log(`Network: ${config.network}`);
+    console.log(`Network: eip155:${chainId}`);
     console.log(`Contract: ${config.contractAddress}`);
   });
 }

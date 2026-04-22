@@ -96,7 +96,6 @@ pnpm build  # compile facilitator server
 RPC_URL=http://127.0.0.1:8545 \
 FACILITATOR_PRIVATE_KEY=0x... \
 PROCESSOR_ENDPOINT_ADDRESS=0x... \
-CHAIN_ID=2651420 \
 pnpm dev
 ```
 
@@ -133,7 +132,6 @@ Defaults target the vela dev stack (Anvil + `vela/dockerfiles/.env.dev`); overri
 |---|---|
 | `FACILITATOR_URL` | `http://localhost:3000` |
 | `RPC_URL` | `http://localhost:8545` |
-| `CHAIN_ID` | `31337` |
 | `PROCESSOR_ENDPOINT_ADDRESS` | deterministic Anvil deploy address |
 | `TOKEN_ADDRESS` | `ZeroAddress` (fine for `assetAmount=0`) |
 | `TEE_PUBLIC_KEY_HEX` | dev TEE public key (from vela `.env.dev`) |
@@ -159,10 +157,9 @@ All configuration is via environment variables:
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `RPC_URL` | yes | — | Ethereum JSON-RPC URL |
+| `RPC_URL` | yes | — | Ethereum JSON-RPC URL. The chain ID is derived from it at startup. |
 | `FACILITATOR_PRIVATE_KEY` | yes | — | Hex private key of the facilitator's Ethereum wallet (pays gas) |
 | `PROCESSOR_ENDPOINT_ADDRESS` | yes | — | Address of the deployed `ProcessorEndpoint` contract |
-| `CHAIN_ID` | yes | — | EVM chain ID (e.g. `2651420` for Vela mainnet) |
 | `MAX_FEE_VALUE` | no | `0` | ETH in wei sent as `msg.value` to cover service fees |
 | `VELA_NOVA_APPLICATION_ID` | no | `1` | vela-nova application ID, used for x402 payments |
 | `PORT` | no | `3000` | HTTP server port |

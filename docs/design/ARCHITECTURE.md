@@ -138,13 +138,13 @@ import { x402Facilitator } from '@x402/core/facilitator';
 import { registerPrivateVelaFixedScheme } from '@horizen/x402-private-vela-fixed';
 
 const facilitator = new x402Facilitator();
-registerPrivateVelaFixedScheme(facilitator, {
+// async: the CAIP-2 network identifier is derived from the RPC's chainId.
+await registerPrivateVelaFixedScheme(facilitator, {
   rpcUrl: config.rpcUrl,                        // from RPC_URL
   contractAddress: config.contractAddress,        // from PROCESSOR_ENDPOINT_ADDRESS
   signer: new ethers.Wallet(config.signerPrivateKey), // ethers.Signer from FACILITATOR_PRIVATE_KEY
   maxFeeValue: config.maxFeeValue,                // from MAX_FEE_VALUE
   applicationId: config.applicationId,            // from VELA_NOVA_APPLICATION_ID
-  network: `eip155:${config.chainId}`,            // derived from CHAIN_ID
 });
 
 // x402 routes delegate to facilitator.verify() / facilitator.settle()
@@ -232,11 +232,12 @@ import { x402Client } from '@x402/core/client';
 import { registerPrivateVelaFixedClient } from '@horizen/x402-private-vela-fixed';
 
 const client = new x402Client();
-registerPrivateVelaFixedClient(client, {
+// async: the CAIP-2 network identifier is derived from the RPC's chainId.
+await registerPrivateVelaFixedClient(client, {
   signer: buyerSigner,                     // ethers.Signer (for EIP-712 + EIP-2612)
   p521PrivateKey: buyerP521Key,            // buyer's P-521 key (for payload encryption, not Ethereum)
   teePublicKey: teeP521PublicKey,          // TEE's P-521 public key
-  rpcUrl: 'https://rpc.vela.network',      // for reading nonces from chain
+  rpcUrl: 'https://rpc.vela.network',      // for reading nonces + chainId (network)
   contractAddress: processorEndpointAddr,  // ProcessorEndpoint address
 });
 
@@ -313,8 +314,7 @@ The facilitator is configured via environment variables:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `CHAIN_ID` | Chain ID (for EIP-712 domain and CAIP-2 network derivation) | `2651420` |
-| `RPC_URL` | Vela chain RPC endpoint | `https://rpc.vela.network` |
+| `RPC_URL` | Vela chain RPC endpoint. The chain ID (used in the EIP-712 domain and to derive the CAIP-2 network) is read from it at startup. | `https://rpc.vela.network` |
 | `FACILITATOR_PRIVATE_KEY` | EOA private key (used to create an ethers.Signer; pays gas + maxFeeValue) | `0xac0974...` |
 | `PROCESSOR_ENDPOINT_ADDRESS` | ProcessorEndpoint contract address | `0x5FbDB2...` |
 | `MAX_FEE_VALUE` | ETH in wei sent as `msg.value` for service fees | `1000000000000000` |

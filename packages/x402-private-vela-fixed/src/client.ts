@@ -1,3 +1,4 @@
+import { ethers } from "ethers";
 import type { SchemeNetworkClient, PaymentPayloadResult, PaymentPayloadContext } from "@x402/core/types";
 import type { PaymentRequirements } from "@x402/core/types";
 import { x402Client } from "@x402/core/client";
@@ -41,7 +42,7 @@ class PrivateVelaFixedClientScheme implements SchemeNetworkClient {
  * @example
  * ```typescript
  * const client = new x402Client();
- * registerPrivateVelaFixedClient(client, {
+ * await registerPrivateVelaFixedClient(client, {
  *   signer: buyerSigner,
  *   p521PrivateKey: buyerP521Key,
  *   teePublicKey: teeP521PublicKey,
@@ -50,11 +51,12 @@ class PrivateVelaFixedClientScheme implements SchemeNetworkClient {
  * });
  * ```
  */
-export function registerPrivateVelaFixedClient(
+export async function registerPrivateVelaFixedClient(
   client: x402Client,
-  config: VelaClientConfig & { network: string }
-): x402Client {
-  const scheme = new PrivateVelaFixedClientScheme(config);
-  client.register(config.network as any, scheme);
+  config: VelaClientConfig
+): Promise<x402Client> {
+  const { chainId } = await new ethers.JsonRpcProvider(config.rpcUrl).getNetwork();
+  const network = `eip155:${chainId}`;
+  client.register(network as any, new PrivateVelaFixedClientScheme(config));
   return client;
 }
