@@ -87,6 +87,10 @@ export interface VelaSchemeConfig {
   maxFeeValue: bigint;       // ETH in wei sent as msg.value for service fees
   applicationId: bigint;     // vela-nova application ID (from VELA_NOVA_APPLICATION_ID)
   network: string;           // CAIP-2 network identifier, e.g. "eip155:2651420"
+  /** Polling interval (ms) while waiting for the TEE's AppEvent. Default 2000. */
+  appEventPollIntervalMs?: number;
+  /** Polling timeout (ms) while waiting for the TEE's AppEvent. Default 60000. */
+  appEventPollTimeoutMs?: number;
 }
 
 // ============================================================================

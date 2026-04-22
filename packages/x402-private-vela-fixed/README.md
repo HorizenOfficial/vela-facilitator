@@ -4,9 +4,10 @@ x402 payment scheme implementation for [Vela](https://github.com/HorizenOfficial
 
 ## What it provides
 
-- **Facilitator**: verify and settle payments via `submitRequestFor()` on `ProcessorEndpoint`
+- **Facilitator**: verify and settle payments via `submitRequestFor()` on `ProcessorEndpoint`. `/settle` blocks until the TEE emits the matching `AppEvent` — a successful response is cryptographic proof that the transfer landed as specified.
 - **Client**: build, sign, and encrypt transfer payloads (EIP-712 + EIP-2612 + P-521 ECIES)
 - **Resource server**: configure `PaymentRequirements` with vela-nova `invoiceId` tracking
+- **`computeTransferReceiptHash`**: helper that recomputes vela-nova's `AppEvent.eventSubType` hash, for off-facilitator monitoring.
 
 ## Installation
 
@@ -36,10 +37,13 @@ registerPrivateVelaFixedScheme(facilitator, {
   maxFeeValue: 0n,          // ETH in wei for service fees
   applicationId: 1n,        // vela-nova app ID
   network: "eip155:2651420",
+  // Optional: how long `/settle` waits for the TEE AppEvent (defaults 2s / 60s).
+  appEventPollIntervalMs: 2_000,
+  appEventPollTimeoutMs: 60_000,
 });
 ```
 
-The facilitator will handle `POST /verify` and `POST /settle` for the `private-vela-fixed` scheme.
+The facilitator will handle `POST /verify` and `POST /settle` for the `private-vela-fixed` scheme. On `/settle`, the facilitator submits the request on-chain and then polls for the TEE's `AppEvent` matching the computed receipt hash before returning success; on timeout it returns `errorReason: "tee_processing_timeout"` while still reporting the on-chain `requestId` in `extensions`.
 
 ### `VelaSchemeConfig`
 
@@ -51,6 +55,8 @@ The facilitator will handle `POST /verify` and `POST /settle` for the `private-v
 | `maxFeeValue` | `bigint` | ETH in wei sent as `msg.value` for service fees |
 | `applicationId` | `bigint` | vela-nova application ID |
 | `network` | `string` | CAIP-2 network (e.g. `"eip155:2651420"`) |
+| `appEventPollIntervalMs` | `number?` | Poll interval for the TEE `AppEvent` (default `2000`) |
+| `appEventPollTimeoutMs` | `number?` | Timeout before `/settle` returns `tee_processing_timeout` (default `60000`) |
 
 ---
 
@@ -142,7 +148,7 @@ The seller configures an `invoiceId` per-route in `PaymentRequirements.extra`. T
 **Domain**:
 ```
 name: "Vela"
-version: "1"
+version: "0"
 chainId: <chain ID>
 verifyingContract: <ProcessorEndpoint address>
 ```
@@ -193,6 +199,37 @@ interface VelaServerConfig { ... }   // seller
 ```
 
 ---
+
+## Transfer receipt hash
+
+`computeTransferReceiptHash` is a TypeScript port of the hash vela-nova emits as `AppEvent.eventSubType` when the TEE successfully processes a transfer with a non-empty `invoiceId`:
+
+```
+keccak256(
+  uint32_be(len(invoiceId)) ||
+  invoiceId                 ||
+  sender        (20 bytes)  ||
+  tokenAddress  (20 bytes)  ||
+  amount        (32 bytes, big-endian zero-padded) ||
+  recipient     (20 bytes)
+)
+```
+
+Because the hash binds `invoiceId + sender + tokenAddress + amount + recipient`, a matching `AppEvent` is cryptographic proof that the TEE executed exactly that transfer. The facilitator uses this internally in `/settle`; sellers can use it to subscribe to the right `AppEvent` independently:
+
+```typescript
+import { computeTransferReceiptHash } from "@horizen/x402-private-vela-fixed";
+
+const expected = computeTransferReceiptHash({
+  invoiceId: "INV-001",
+  sender: buyerAddress,
+  tokenAddress,
+  amount: 1_000_000n,
+  recipient: sellerAddress,
+});
+
+// Subscribe via VelaClient.getAppEvents(fromBlock, toBlock, appId, requestId, expected)
+```
 
 ## Compatibility note
 

@@ -29,6 +29,15 @@ export interface VelaClientConfig {
   rpcUrl: string;
   contractAddress: string;       // ProcessorEndpoint contract address
   applicationId?: bigint;        // vela-nova application ID (defaults to 1n)
+  /**
+   * If true, the settle will be a pure private-state transfer: no on-chain
+   * token deposit is pulled from the buyer (assetAmount=0, no permit). The
+   * buyer must have already deposited the required amount into their
+   * vela-nova private balance via /submit beforehand.
+   *
+   * Default: false (the settle performs deposit+transfer in one tx).
+   */
+  skipOnchainDeposit?: boolean;
 }
 
 /**
@@ -59,7 +68,13 @@ export async function signPayment(
   const nonce: bigint = await endpoint.facilitatorNonces(sender);
 
   const deadline = BigInt(Math.floor(Date.now() / 1000) + deadlineSeconds);
-  const assetAmount = BigInt(requirements.amount);
+  const privateAmount = BigInt(requirements.amount);
+  // On-chain assetAmount: 0 when the buyer has already deposited (skipOnchainDeposit),
+  // else the full business amount (deposit+transfer in one settle).
+  const assetAmount = config.skipOnchainDeposit ? 0n : privateAmount;
+  // On-chain tokenAddress: must be ZeroAddress when assetAmount=0 (the ProcessorEndpoint
+  // reverts with InvalidValue otherwise). Real token is used only when we're also
+  // performing an on-chain deposit.
   const tokenAddress = assetAmount > 0n ? requirements.asset : ethers.ZeroAddress;
 
   // 2. Build vela-nova transfer payload

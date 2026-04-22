@@ -1,11 +1,9 @@
 import { ethers } from "ethers";
 import { encrypt, generateKeyPair, importPublicKeyFromHex } from "@horizen/vela-common-ts";
 import {
-  REQUEST_TYPE_PROCESS,
   EIP712_DOMAIN_NAME,
   EIP712_DOMAIN_VERSION,
   REQUEST_AUTHORIZATION_TYPEHASH,
-  type VelaPaymentPayload,
   type DepositPermit,
   type RequestAuthorization,
   type SupportedRequestType,
@@ -24,7 +22,7 @@ const TOKEN_ABI = [
   "function allowance(address, address) view returns (uint256)",
 ];
 
-export interface FacilitatorClientConfig {
+export interface FacilitatorHelperConfig {
   wallet: ethers.Wallet;
   provider: ethers.JsonRpcProvider;
   contractAddress: string;
@@ -42,10 +40,10 @@ export interface HttpResponse<T = Record<string, unknown>> {
 }
 
 /**
- * FacilitatorClient: client library for interacting with a vela-facilitator server.
+ * FacilitatorHelper: client library for interacting with a vela-facilitator server.
  * Handles EIP-712 + EIP-2612 signing, payload encryption, and HTTP calls.
  */
-export class FacilitatorClient {
+export class FacilitatorHelper {
   readonly wallet: ethers.Wallet;
   private readonly provider: ethers.JsonRpcProvider;
   private readonly contractAddress: string;
@@ -56,7 +54,7 @@ export class FacilitatorClient {
   private readonly applicationId: bigint;
   private readonly buyerP521PrivateKey?: CryptoKey;
 
-  constructor(config: FacilitatorClientConfig) {
+  constructor(config: FacilitatorHelperConfig) {
     this.wallet = config.wallet.connect(config.provider);
     this.provider = config.provider;
     this.contractAddress = config.contractAddress;
@@ -77,7 +75,7 @@ export class FacilitatorClient {
   // ---------------------------------------------------------------------------
 
   /**
-   * Low-level POST to the facilitator server.
+   * Low-level POST to the facilitator server (via helper).
    * Handles BigInt serialization automatically.
    */
   async post<T = Record<string, unknown>>(path: string, body: unknown): Promise<HttpResponse<T>> {
@@ -413,73 +411,4 @@ export class FacilitatorClient {
     };
   }
 
-  /**
-   * Build an x402 PaymentPayload for the facilitator (without sending it).
-   *
-   * By default the on-chain `assetAmount` (deposit pulled from the buyer via permit)
-   * equals `requirements.amount`, i.e. the settle performs deposit+transfer in one tx.
-   *
-   * Pass `assetAmount: 0n` to skip the on-chain deposit when the buyer has already
-   * deposited funds into their private balance (the transfer becomes a pure
-   * private-state operation).
-   */
-  async buildX402Payload(params: {
-    requirements: PaymentRequirements;
-    x402Version?: number;
-    assetAmount?: bigint;
-  }): Promise<PaymentPayload> {
-    const req = params.requirements;
-    const privateAmount = BigInt(req.amount);
-    const assetAmount = params.assetAmount ?? privateAmount;
-    // On-chain tokenAddress: must be ZeroAddress when assetAmount=0 (ProcessorEndpoint
-    // reverts with InvalidValue otherwise). Real token is only present when we're also
-    // performing an on-chain deposit as part of this settle.
-    const onChainTokenAddress = assetAmount > 0n ? this.tokenAddress : ethers.ZeroAddress;
-    // Private-state tokenAddress: always the real token (the TEE needs it to identify
-    // which private balance to debit/credit).
-    const privateTokenAddress = privateAmount > 0n ? this.tokenAddress : ethers.ZeroAddress;
-    const deadline = BigInt(Math.floor(Date.now() / 1000) + 300);
-
-    const invoiceId = (req.extra as Record<string, string>)?.invoiceId ?? "";
-    const payloadBytes = await this.buildTransferPayload({
-      to: req.payTo,
-      amount: req.amount,
-      invoice_id: invoiceId,
-      tokenAddress: privateTokenAddress,
-    });
-
-    const payloadHex = ethers.hexlify(payloadBytes);
-    const payloadHash = ethers.keccak256(payloadBytes);
-
-    const { signature: requestSignature, authorization } = await this.signRequestAuthorization({
-      requestType: REQUEST_TYPE_PROCESS,
-      payloadHash,
-      tokenAddress: onChainTokenAddress,
-      assetAmount,
-      deadline,
-    });
-
-    let depositPermit: DepositPermit | null = null;
-    if (assetAmount > 0n) {
-      depositPermit = await this.signDepositPermit({
-        spender: this.contractAddress,
-        value: assetAmount,
-        deadline,
-      });
-    }
-
-    const velaPayload: VelaPaymentPayload = {
-      sender: this.wallet.address,
-      requestSignature,
-      depositPermit,
-      requestAuthorization: authorization,
-      payload: payloadHex,
-    };
-
-    return {
-      x402Version: params.x402Version ?? 2,
-      accepted: req,
-      payload: velaPayload as unknown as Record<string, unknown>,
-    };
-  }
 }

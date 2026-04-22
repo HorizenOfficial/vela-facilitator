@@ -1,6 +1,20 @@
 import { ethers } from "ethers";
-import { generateKeyPair, exportPublicKeyToHex, hexToBytes } from "@horizen/vela-common-ts";
-import { FacilitatorClient } from "@horizen/x402-private-vela-fixed";
+import {
+  generateKeyPair,
+  exportPublicKeyToHex,
+  hexToBytes,
+  importPublicKeyFromHex,
+} from "@horizen/vela-common-ts";
+import {
+  FacilitatorHelper,
+  registerPrivateVelaFixedClient,
+} from "@horizen/x402-private-vela-fixed";
+import { x402Client } from "@x402/core/client";
+import type {
+  PaymentPayload,
+  PaymentRequired,
+  PaymentRequirements,
+} from "@x402/core/types";
 import type { GlobalSetupContext } from "vitest/node";
 import { startAnvil, stopAnvil, type AnvilInstance } from "../mock/anvil.js";
 import { deployContracts } from "../mock/deploy.js";
@@ -57,6 +71,11 @@ export async function setup({ provide }: GlobalSetupContext) {
   process.env.MAX_FEE_VALUE = "0";
   process.env.VELA_NOVA_APPLICATION_ID = "1";
   process.env.PORT = String(PORT);
+  // Keep tests fast: the mock emits AppEvent synchronously with submitRequestFor,
+  // so the first poll (immediate) always finds it. Tight timeout also bounds the
+  // negative "no AppEvent emitted" case.
+  process.env.APP_EVENT_POLL_INTERVAL_MS = "100";
+  process.env.APP_EVENT_POLL_TIMEOUT_MS = "3000";
 
   const config = loadConfig();
   const app = createApp(config, provider);
@@ -84,13 +103,13 @@ export async function setup({ provide }: GlobalSetupContext) {
 }
 
 /**
- * Create a FacilitatorClient from a test account and fixtures.
+ * Create a FacilitatorHelper from a test account and fixtures.
  */
-export function createClient(privateKey: string, fixtures: TestFixtures): FacilitatorClient {
+export function createClient(privateKey: string, fixtures: TestFixtures): FacilitatorHelper {
   const provider = new ethers.JsonRpcProvider(fixtures.rpcUrl);
   const wallet = new ethers.Wallet(privateKey);
 
-  return new FacilitatorClient({
+  return new FacilitatorHelper({
     wallet,
     provider,
     contractAddress: fixtures.contracts.processorEndpoint.address,
@@ -99,6 +118,42 @@ export function createClient(privateKey: string, fixtures: TestFixtures): Facili
     teePublicKeyHex: fixtures.teePublicKeyHex,
     facilitatorUrl: fixtures.serverUrl,
   });
+}
+
+/**
+ * Build a signed x402 PaymentPayload for the buyer side — using the canonical
+ * x402Client + registerPrivateVelaFixedClient pattern (same as production clients).
+ */
+export async function buildBuyerPaymentPayload(
+  privateKey: string,
+  requirements: PaymentRequirements,
+  fixtures: TestFixtures,
+  options: { skipOnchainDeposit?: boolean } = {},
+): Promise<PaymentPayload> {
+  const provider = new ethers.JsonRpcProvider(fixtures.rpcUrl);
+  const signer = new ethers.Wallet(privateKey).connect(provider);
+  const buyerP521 = await generateKeyPair();
+  const teePublicKey = await importPublicKeyFromHex(fixtures.teePublicKeyHex);
+  const network = `eip155:${fixtures.chainId}` as `${string}:${string}`;
+
+  const buyer = new x402Client();
+  registerPrivateVelaFixedClient(buyer, {
+    signer,
+    p521PrivateKey: buyerP521.privateKey,
+    teePublicKey,
+    rpcUrl: fixtures.rpcUrl,
+    contractAddress: fixtures.contracts.processorEndpoint.address,
+    applicationId: 1n,
+    network,
+    skipOnchainDeposit: options.skipOnchainDeposit,
+  });
+
+  const paymentRequired: PaymentRequired = {
+    x402Version: 2,
+    resource: { url: "x402://test" },
+    accepts: [requirements],
+  };
+  return buyer.createPaymentPayload(paymentRequired);
 }
 
 export async function teardown() {

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, inject } from "vitest";
 import { ethers } from "ethers";
-import { createClient } from "../setup.js";
+import { createClient, buildBuyerPaymentPayload } from "../setup.js";
 
 import type { PaymentRequirements } from "@x402/core/types";
 
@@ -28,7 +28,11 @@ describe("POST /verify", () => {
   it("returns isValid=true for valid payload", async () => {
     const client = createClient(fixtures.userAccounts[0].privateKey, fixtures);
     const requirements = makeRequirements(fixtures);
-    const paymentPayload = await client.buildX402Payload({ requirements });
+    const paymentPayload = await buildBuyerPaymentPayload(
+      fixtures.userAccounts[0].privateKey,
+      requirements,
+      fixtures,
+    );
 
     const { status, body } = await client.verify(paymentPayload, requirements);
 
@@ -40,7 +44,11 @@ describe("POST /verify", () => {
   it("returns isValid=false for invalid signature", async () => {
     const client = createClient(fixtures.userAccounts[0].privateKey, fixtures);
     const requirements = makeRequirements(fixtures);
-    const paymentPayload = await client.buildX402Payload({ requirements });
+    const paymentPayload = await buildBuyerPaymentPayload(
+      fixtures.userAccounts[0].privateKey,
+      requirements,
+      fixtures,
+    );
 
     // Corrupt the request signature
     (paymentPayload.payload as Record<string, unknown>).requestSignature =

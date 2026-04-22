@@ -6,7 +6,11 @@
  *   2. Funder mints AMOUNT tokens directly to the buyer (MockERC20.mint).
  *   3. Buyer ASSOCIATEKEY + Seller ASSOCIATEKEY via POST /submit.
  *   4. Buyer deposits AMOUNT tokens via POST /submit (PROCESS + EIP-2612 permit).
- *   5. Buyer transfers AMOUNT to seller via POST /verify + /settle (x402).
+ *   5. Buyer builds PaymentPayload; Seller calls /verify + /settle via the
+ *      standard HTTPFacilitatorClient. The facilitator's /settle now blocks
+ *      until the TEE emits the AppEvent whose eventSubType hash binds
+ *      invoiceId + sender + token + amount + recipient — so a 200 response
+ *      proves the transfer landed in the TEE exactly as specified.
  *   6. Seller withdraws AMOUNT via POST /submit (PROCESS with encrypted withdraw payload).
  *   7. Seller CLAIM: POST /claim to release the pending withdrawal into the seller's wallet.
  *   8. Verify the seller's on-chain ERC-20 balance grew by AMOUNT, and read the
@@ -52,11 +56,14 @@ import {
   fetchAndDecryptUserEvents,
 } from "@horizen/vela-common-ts";
 import {
-  FacilitatorClient,
+  FacilitatorHelper,
   REQUEST_TYPE_ASSOCIATEKEY,
   REQUEST_TYPE_PROCESS,
+  registerPrivateVelaFixedClient,
 } from "@horizen/x402-private-vela-fixed";
-import type { PaymentRequirements } from "@x402/core/types";
+import type { PaymentRequired, PaymentRequirements } from "@x402/core/types";
+import { x402Client } from "@x402/core/client";
+import { HTTPFacilitatorClient } from "@x402/core/server";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -129,7 +136,7 @@ async function waitForRequestCompleted(
  * Register a user's P-521 public key via ASSOCIATEKEY through the facilitator.
  */
 async function associateKey(
-  client: FacilitatorClient,
+  client: FacilitatorHelper,
   velaClient: VelaClient,
   publicKey: CryptoKey,
   applicationId: bigint,
@@ -152,7 +159,7 @@ async function associateKey(
   console.log(`      ${label}: ASSOCIATEKEY completed.`);
 }
 
-function buildFacilitatorClient(opts: {
+function buildFacilitatorHelper(opts: {
   wallet: ethers.Wallet;
   provider: ethers.JsonRpcProvider;
   contractAddress: string;
@@ -162,8 +169,8 @@ function buildFacilitatorClient(opts: {
   facilitatorUrl: string;
   applicationId: bigint;
   p521PrivateKey: CryptoKey;
-}): FacilitatorClient {
-  return new FacilitatorClient({
+}): FacilitatorHelper {
+  return new FacilitatorHelper({
     wallet: opts.wallet,
     provider: opts.provider,
     contractAddress: opts.contractAddress,
@@ -209,6 +216,7 @@ async function main() {
     provider,
   );
   const teePublicKeyHex: string = await teeAuth.getPubSecp521r1();
+  const teePublicKey = await importPublicKeyFromHex(teePublicKeyHex);
 
   // --- participants -----------------------------------------------------
   // Fresh Ethereum wallets + P-521 keypairs (generated per-run)
@@ -217,12 +225,12 @@ async function main() {
   const buyerKeyPair = await generateKeyPair();
   const sellerKeyPair = await generateKeyPair();
 
-  const buyerClient = buildFacilitatorClient({
+  const buyerClient = buildFacilitatorHelper({
     wallet: buyerWallet, provider, contractAddress, tokenAddress, chainId,
     teePublicKeyHex, facilitatorUrl, applicationId,
     p521PrivateKey: buyerKeyPair.privateKey,
   });
-  const sellerClient = buildFacilitatorClient({
+  const sellerClient = buildFacilitatorHelper({
     wallet: sellerWallet, provider, contractAddress, tokenAddress, chainId,
     teePublicKeyHex, facilitatorUrl, applicationId,
     p521PrivateKey: sellerKeyPair.privateKey,
@@ -280,35 +288,66 @@ async function main() {
   console.log(`    deposit completed.`);
 
   // --- step 4: x402 transfer Buyer -> Seller ----------------------------
+  // Buyer uses the standard x402Client.createPaymentPayload() with our
+  // registered scheme — no custom wrapper. The seller uses its own
+  // HTTPFacilitatorClient, wrapped by VerifyingFacilitatorClient so that
+  // settle() only returns success=true once the TEE has processed the request
+  // AND the decrypted transfer_received event matches the PaymentRequirements.
   console.log(`\n[4] x402 TRANSFER Buyer -> Seller (${amount} tokens)`);
+  const network = `eip155:${chainId}` as `${string}:${string}`;
   const requirements: PaymentRequirements = {
     scheme: "private-vela-fixed",
-    network: `eip155:${chainId}`,
+    network,
     asset: tokenAddress,
     amount: amount.toString(),
     payTo: sellerWallet.address,
     maxTimeoutSeconds: 60,
     extra: { invoiceId: `INV-SMOKE-${Date.now()}` },
   };
-  // assetAmount=0 because the buyer already deposited in step [3] — this settle is a
-  // pure private-state transfer (no on-chain token pull).
-  const payment = await buyerClient.buildX402Payload({ requirements, assetAmount: 0n });
 
-  const verifyRes = await buyerClient.verify(payment, requirements);
-  if (verifyRes.status !== 200 || verifyRes.body.isValid !== true) {
-    throw new Error(`/verify failed: ${verifyRes.status} ${JSON.stringify(verifyRes.body)}`);
+  // Buyer-side: standard x402Client + registered scheme. skipOnchainDeposit=true
+  // because the buyer already deposited in step [3] — this is a pure private-state
+  // transfer (assetAmount=0 on-chain, no permit).
+  const buyerX402 = new x402Client();
+  registerPrivateVelaFixedClient(buyerX402, {
+    signer: buyerWallet,
+    p521PrivateKey: buyerKeyPair.privateKey,
+    teePublicKey,
+    rpcUrl,
+    contractAddress,
+    applicationId,
+    network,
+    skipOnchainDeposit: true,
+  });
+  // In a real flow, `paymentRequired` comes from the seller's 402 response.
+  const paymentRequired: PaymentRequired = {
+    x402Version: 2,
+    resource: { url: "x402://dev-smoke" },
+    accepts: [requirements],
+  };
+  const payment = await buyerX402.createPaymentPayload(paymentRequired);
+
+  // Seller-side: plain HTTPFacilitatorClient is enough now — the facilitator's
+  // /settle blocks until the TEE AppEvent arrives with the expected hash.
+  const sellerFacilitator = new HTTPFacilitatorClient({ url: facilitatorUrl });
+
+  const verifyResult = await sellerFacilitator.verify(payment, requirements);
+  if (!verifyResult.isValid) {
+    throw new Error(
+      `/verify failed: ${verifyResult.invalidReason} ${verifyResult.invalidMessage}`,
+    );
   }
   console.log(`    /verify -> isValid=true`);
 
-  const settleRes = await buyerClient.settle(payment, requirements);
-  if (settleRes.status !== 200 || settleRes.body.success !== true) {
-    throw new Error(`/settle failed: ${settleRes.status} ${JSON.stringify(settleRes.body)}`);
+  const settleResult = await sellerFacilitator.settle(payment, requirements);
+  if (!settleResult.success) {
+    throw new Error(
+      `/settle failed: ${settleResult.errorReason} ${settleResult.errorMessage}`,
+    );
   }
-  const settleReqId = (settleRes.body.extensions as Record<string, string> | undefined)?.requestId;
-  if (!settleReqId) throw new Error(`/settle returned no requestId in extensions`);
-  console.log(`    /settle -> requestId=${settleReqId}, waiting...`);
-  await waitForRequestCompleted(funderVelaClient, settleReqId, "TRANSFER");
-  console.log(`    transfer completed.`);
+  const settleExt = settleResult.extensions as Record<string, unknown> | undefined;
+  console.log(`    /settle + TEE confirmation OK.`);
+  console.log(`      requestId=${settleExt?.requestId} eventSubType=${settleExt?.eventSubType}`);
 
   // --- step 5: Seller withdraws AMOUNT --------------------------------
   console.log(`\n[5] Seller WITHDRAW ${amount} tokens`);
@@ -365,7 +404,6 @@ async function main() {
   // topic (and subgraph `Bytes` field) is keccak256(utf8Bytes(name)), not the name itself.
   console.log(`\n[8] Decrypt seller's events via subgraph`);
   const subgraph = createSubgraphClient(subgraphUrl);
-  const teePublicKey = await importPublicKeyFromHex(teePublicKeyHex);
   const subtypeHashes = ["transfer_received", "withdrawal"].map((n) =>
     ethers.keccak256(ethers.toUtf8Bytes(n)),
   );

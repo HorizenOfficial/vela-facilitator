@@ -72,16 +72,32 @@ contract MockProcessorEndpoint is ReentrancyGuard {
     // Request counter used as index in generateRequestId (incremented on every submit)
     uint256 private _requestCount;
 
+    // TEE simulation: one-shot AppEvent emission. Tests set `nextAppEventSubType` (and
+    // optionally `nextAppEventData`) before calling submit*For(); the mock will emit
+    // AppEvent in the same tx as a successful submission, mimicking the TEE stateUpdate
+    // path. Reset to zero after emission. A zero subType means "no AppEvent emitted".
+    bytes32 public nextAppEventSubType;
+    bytes public nextAppEventData;
+
     // -------------------------------------------------------------------------
     // Events
     // -------------------------------------------------------------------------
 
+    // Matches the real IProcessorEndpoint.RequestSubmitted signature
+    // (facilitator = address(0) for direct submitRequest calls).
     event RequestSubmitted(
+        uint64 indexed applicationId,
         bytes32 indexed requestId,
         address indexed sender,
-        address indexed facilitator,
-        uint64 applicationId,
-        Structs.RequestType requestType
+        address facilitator
+    );
+
+    // Matches the real ProcessorEndpoint AppEvent (unencrypted application-level events).
+    event AppEvent(
+        uint64 indexed applicationId,
+        bytes32 indexed requestId,
+        bytes32 indexed eventSubType,
+        bytes data
     );
 
     event ApplicationDeployed(uint64 indexed applicationId);
@@ -119,7 +135,9 @@ contract MockProcessorEndpoint is ReentrancyGuard {
             abi.encode(
                 keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
                 keccak256(bytes("Vela")),
-                keccak256(bytes("1")),
+                // Must match the real ProcessorEndpoint and the TS client constants
+                // (EIP712_DOMAIN_VERSION = "0", derived from PROTOCOL_VERSION).
+                keccak256(bytes("0")),
                 block.chainid,
                 address(this)
             )
@@ -157,6 +175,44 @@ contract MockProcessorEndpoint is ReentrancyGuard {
     function removeAllowedToken(address tokenAddress) external onlyOwner {
         globalAllowedTokens[tokenAddress] = false;
         emit TokenDisallowed(tokenAddress);
+    }
+
+    // -------------------------------------------------------------------------
+    // TEE simulation (test helpers — not present on the real ProcessorEndpoint)
+    // -------------------------------------------------------------------------
+
+    /**
+     * @notice Arm a one-shot AppEvent emission. The next successful submitRequest[For]
+     *         will emit AppEvent(applicationId, requestId, eventSubType, data) in the
+     *         same tx — simulating the TEE's stateUpdate path.
+     *         Passing eventSubType = bytes32(0) disarms (no AppEvent is emitted).
+     */
+    function setNextAppEvent(bytes32 eventSubType, bytes calldata data) external {
+        nextAppEventSubType = eventSubType;
+        nextAppEventData = data;
+    }
+
+    /**
+     * @notice Manually emit an AppEvent for an already-submitted request.
+     *         Useful for tests that want to trigger TEE completion after the fact.
+     */
+    function emitAppEvent(
+        uint64 applicationId,
+        bytes32 requestId,
+        bytes32 eventSubType,
+        bytes calldata data
+    ) external {
+        emit AppEvent(applicationId, requestId, eventSubType, data);
+    }
+
+    function _maybeEmitQueuedAppEvent(uint64 applicationId, bytes32 requestId) internal {
+        bytes32 subType = nextAppEventSubType;
+        if (subType != bytes32(0)) {
+            emit AppEvent(applicationId, requestId, subType, nextAppEventData);
+            // One-shot: clear queued event so the next submission doesn't reuse it.
+            nextAppEventSubType = bytes32(0);
+            nextAppEventData = "";
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -239,7 +295,8 @@ contract MockProcessorEndpoint is ReentrancyGuard {
 
         unchecked { _requestCount++; }
 
-        emit RequestSubmitted(requestId, msg.sender, address(0), applicationId, requestType);
+        emit RequestSubmitted(applicationId, requestId, msg.sender, address(0));
+        _maybeEmitQueuedAppEvent(applicationId, requestId);
         return requestId;
     }
 
@@ -353,7 +410,8 @@ contract MockProcessorEndpoint is ReentrancyGuard {
 
         unchecked { _requestCount++; }
 
-        emit RequestSubmitted(requestId, sender, msg.sender, applicationId, requestType);
+        emit RequestSubmitted(applicationId, requestId, sender, msg.sender);
+        _maybeEmitQueuedAppEvent(applicationId, requestId);
         return requestId;
     }
 

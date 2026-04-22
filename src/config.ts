@@ -21,6 +21,8 @@ export interface Config {
   applicationId: bigint;
   port: number;
   network: string;
+  appEventPollIntervalMs?: number;
+  appEventPollTimeoutMs?: number;
 }
 
 export function loadConfig(): Config {
@@ -31,6 +33,12 @@ export function loadConfig(): Config {
   const maxFeeValue = BigInt(getEnv("MAX_FEE_VALUE", "50"));
   const applicationId = BigInt(getEnv("VELA_NOVA_APPLICATION_ID", "1"));
   const port = parseInt(getEnv("PORT", "3000"), 10);
+  const appEventPollIntervalMs = process.env.APP_EVENT_POLL_INTERVAL_MS
+    ? parseInt(process.env.APP_EVENT_POLL_INTERVAL_MS, 10)
+    : undefined;
+  const appEventPollTimeoutMs = process.env.APP_EVENT_POLL_TIMEOUT_MS
+    ? parseInt(process.env.APP_EVENT_POLL_TIMEOUT_MS, 10)
+    : undefined;
 
   const signer = new ethers.Wallet(privateKey);
   const network = `eip155:${chainId}`;
@@ -44,5 +52,7 @@ export function loadConfig(): Config {
     applicationId,
     port,
     network,
+    appEventPollIntervalMs,
+    appEventPollTimeoutMs,
   };
 }

@@ -5,7 +5,8 @@ import {
   REQUEST_TYPE_ASSOCIATEKEY,
   REQUEST_TYPE_PROCESS,
 } from "../../packages/x402-private-vela-fixed/src/types.js";
-import { createClient } from "../setup.js";
+import { computeTransferReceiptHash } from "@horizen/x402-private-vela-fixed";
+import { createClient, buildBuyerPaymentPayload } from "../setup.js";
 
 
 let fixtures: import("../setup.js").TestFixtures;
@@ -90,7 +91,7 @@ describe("Full E2E Flow", () => {
   describe("x402 flow (verify + settle)", () => {
     it("3. TRANSFER — verifies and settles a payment via x402 endpoints", async () => {
       const client = createClient(fixtures.userAccounts[2].privateKey, fixtures);
-      const requirements = {
+      const requirements: import("@x402/core/types").PaymentRequirements = {
         scheme: "private-vela-fixed",
         network: `eip155:${fixtures.chainId}`,
         asset: fixtures.contracts.token.address,
@@ -100,12 +101,36 @@ describe("Full E2E Flow", () => {
         extra: { invoiceId: "INV-E2E-001" },
       };
 
-      const paymentPayload = await client.buildX402Payload({ requirements });
+      const paymentPayload = await buildBuyerPaymentPayload(
+        fixtures.userAccounts[2].privateKey,
+        requirements,
+        fixtures,
+      );
 
       // Verify
       const verifyRes = await client.verify(paymentPayload, requirements);
       expect(verifyRes.status).toBe(200);
       expect(verifyRes.body.isValid).toBe(true);
+
+      // Arm the mock to emit AppEvent with the hash vela-nova would produce.
+      const expectedHash = computeTransferReceiptHash({
+        invoiceId: (requirements.extra as { invoiceId: string }).invoiceId,
+        sender: client.address,
+        tokenAddress: requirements.asset,
+        amount: BigInt(requirements.amount),
+        recipient: requirements.payTo,
+      });
+      const adminProvider = new ethers.JsonRpcProvider(fixtures.rpcUrl);
+      const admin = new ethers.Wallet(
+        "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+        adminProvider,
+      );
+      const mock = new ethers.Contract(
+        fixtures.contracts.processorEndpoint.address,
+        ["function setNextAppEvent(bytes32 eventSubType, bytes data)"],
+        admin,
+      );
+      await (await mock.setNextAppEvent(expectedHash, "0x")).wait();
 
       // Settle
       const settleRes = await client.settle(paymentPayload, requirements);

@@ -8,7 +8,7 @@ The facilitator acts as a gas relay: users sign EIP-712 typed messages and the f
 
 - **`POST /submit`** — Application-agnostic gasless submission. Accepts any `ASSOCIATEKEY` or `PROCESS` request signed by the user and submits it to the `ProcessorEndpoint` contract.
 - **`POST /verify`** — x402 off-chain payment verification.
-- **`POST /settle`** — x402 on-chain settlement (calls `submitRequestFor()` on-chain).
+- **`POST /settle`** — x402 on-chain settlement: calls `submitRequestFor()` and then **blocks until the TEE confirms the transfer** by emitting the matching `AppEvent`.
 - **`POST /claim`** — Permissionless claim: calls `claim(tokenAddress, payee)` on `ProcessorEndpoint`. Anyone can trigger the claim — funds always go to `payee`.
 - **`GET /supported`** — Returns the list of supported x402 schemes and networks.
 
@@ -166,6 +166,8 @@ All configuration is via environment variables:
 | `MAX_FEE_VALUE` | no | `0` | ETH in wei sent as `msg.value` to cover service fees |
 | `VELA_NOVA_APPLICATION_ID` | no | `1` | vela-nova application ID, used for x402 payments |
 | `PORT` | no | `3000` | HTTP server port |
+| `APP_EVENT_POLL_INTERVAL_MS` | no | `2000` | How often `/settle` polls for the TEE `AppEvent` after submission |
+| `APP_EVENT_POLL_TIMEOUT_MS` | no | `60000` | How long `/settle` waits before returning `tee_processing_timeout` |
 
 ## x402 scheme: `private-vela-fixed`
 
@@ -180,9 +182,9 @@ See [`packages/x402-private-vela-fixed/README.md`](packages/x402-private-vela-fi
 ## Design notes
 
 - **Nonce management**: clients query `facilitatorNonces[sender]` directly from the contract before signing. The facilitator does not maintain nonce state.
-- **Async settlement**: a successful `POST /settle` means on-chain submission to `ProcessorEndpoint`, not TEE completion. The TEE processes requests asynchronously; the seller monitors TEE events for the encrypted transfer result.
+- **TEE-confirmed settlement**: a successful `POST /settle` means vela-nova's TEE has processed the transfer. After `submitRequestFor()` is mined, the facilitator recomputes the `AppEvent.eventSubType` hash — `keccak256(uint32_be(len(invoiceId)) || invoiceId || sender || tokenAddress || amount(32B) || recipient)` — and polls the chain until the matching `AppEvent` is emitted. Because that hash binds all five fields, the seller gets a cryptographic proof that the transfer landed as specified. On timeout, `/settle` returns `success: false` with `errorReason: "tee_processing_timeout"` (the on-chain `requestId` stays in `extensions` for reconciliation).
 - **EIP-2612 permit**: uses `permit()` (sequential nonces) for gasless ERC-20 approval, unlike Coinbase's reference scheme which uses EIP-3009 `transferWithAuthorization`.
-- **Payload encryption**: the transfer payload is encrypted with the TEE's P-521 ECIES public key. The facilitator cannot read the payload contents.
+- **Payload encryption**: the transfer payload is encrypted with the TEE's P-521 ECIES public key. The facilitator cannot read the payload contents — but the `AppEvent` hash lets it verify the decrypted result anyway.
 
 ## References
 

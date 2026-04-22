@@ -19,6 +19,8 @@ export function createApp(config: Config, provider: ethers.JsonRpcProvider): exp
     maxFeeValue: config.maxFeeValue,
     applicationId: config.applicationId,
     network: config.network,
+    appEventPollIntervalMs: config.appEventPollIntervalMs,
+    appEventPollTimeoutMs: config.appEventPollTimeoutMs,
   });
 
   const app = express();

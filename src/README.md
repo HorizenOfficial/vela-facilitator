@@ -15,6 +15,8 @@ Gasless request submission service for the Vela blockchain platform. Accepts sig
 | `PORT` | no | `3000` | HTTP server port |
 | `MAX_FEE_VALUE` | no | `50` | Maximum fee the facilitator pays per request (in base units) |
 | `VELA_NOVA_APPLICATION_ID` | no | `1` | Application ID forwarded in x402 settle calls |
+| `APP_EVENT_POLL_INTERVAL_MS` | no | `2000` | How often `/settle` polls for the TEE `AppEvent` after submission |
+| `APP_EVENT_POLL_TIMEOUT_MS` | no | `60000` | How long `/settle` waits before returning `tee_processing_timeout` |
 
 ---
 
@@ -110,12 +112,13 @@ curl -X POST http://localhost:3000/verify \
 
 ## POST /settle
 
-Settles an x402 payment on-chain by calling `submitRequestFor()` on the `ProcessorEndpoint` contract. 
-Settlement is **asynchronous** — a successful response means the transaction was submitted, not that the TEE has processed it.
+Settles an x402 payment on-chain by calling `submitRequestFor()` on the `ProcessorEndpoint` contract, then **waits for the TEE to process the request**.
+
+After the tx is mined, the facilitator recomputes the expected `AppEvent.eventSubType` hash — `keccak256(uint32_be(len(invoiceId)) || invoiceId || sender || tokenAddress || amount(32B) || recipient)` — and polls the chain for a matching `AppEvent(applicationId, requestId, eventSubType)`. Because that hash binds all five fields, a match is cryptographic proof the transfer landed as specified. Polling is governed by `APP_EVENT_POLL_INTERVAL_MS` / `APP_EVENT_POLL_TIMEOUT_MS`.
 
 **Request body**: same shape as `/verify`
 
-**Response** `200 OK`:
+**Response** `200 OK` (TEE confirmed):
 ```json
 {
   "success": true,
@@ -123,14 +126,35 @@ Settlement is **asynchronous** — a successful response means the transaction w
   "network": "eip155:2651420",
   "payer": "0xUSER_ADDRESS",
   "extensions": {
-    "requestId": "0xREQUEST_ID"
+    "requestId": "0xREQUEST_ID",
+    "eventSubType": "0xRECEIPT_HASH"
   }
 }
 ```
 
-**Response** `402 Payment Required` (invalid payment):
+**Response** `200 OK` (TEE timeout):
 ```json
-{ "error": "deadline expired" }
+{
+  "success": false,
+  "errorReason": "tee_processing_timeout",
+  "errorMessage": "timed out waiting for TEE AppEvent(...)",
+  "transaction": "0xTX_HASH",
+  "network": "eip155:2651420",
+  "extensions": { "requestId": "0xREQUEST_ID" }
+}
+```
+
+The caller can use `requestId` to reconcile later — the request is submitted on-chain regardless of whether the TEE emits the `AppEvent` in time.
+
+**Response** `200 OK` (invalid payment — rejected before the chain):
+```json
+{
+  "success": false,
+  "errorReason": "invalid signature",
+  "errorMessage": "...",
+  "transaction": "",
+  "network": "eip155:2651420"
+}
 ```
 
 **Example**:
@@ -283,7 +307,7 @@ All requests use EIP-712 typed data signing. The domain and type hash:
 ```json
 {
   "name": "Vela",
-  "version": "1",
+  "version": "0",
   "chainId": <CHAIN_ID>,
   "verifyingContract": "<PROCESSOR_ENDPOINT_ADDRESS>"
 }

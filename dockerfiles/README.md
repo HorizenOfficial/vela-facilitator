@@ -25,6 +25,8 @@ Copy `.env.template` to `.env` and set the required variables:
 | `MAX_FEE_VALUE` | no | `50` | ETH in wei sent as `msg.value` for service fees |
 | `VELA_NOVA_APPLICATION_ID` | no | `1` | vela-nova application ID for x402 payments |
 | `PORT` | no | `3000` | HTTP server port |
+| `APP_EVENT_POLL_INTERVAL_MS` | no | `2000` | How often `/settle` polls for the TEE `AppEvent` after submission |
+| `APP_EVENT_POLL_TIMEOUT_MS` | no | `60000` | How long `/settle` waits before returning `tee_processing_timeout` |
 
 If you have started the vela dev local environment you can also use the .env.dev instead, with values already set for it.
 
