@@ -23,13 +23,17 @@ In the x402 flow:
 - **`invoiceId`** (max 100 chars) is included in `PaymentRequirements.extra.invoiceId` so the seller can correlate the settlement with the original HTTP request. The seller sets it in the 402 response, and the client is expected to include it in the vela-nova transfer payload as `invoice_id`. After TEE processing, both parties receive encrypted events containing the `invoice_id`. The x402 standard has no native invoiceId field, but `PaymentRequirements.extra` is scheme-specific and extensible — our scheme uses `extra.invoiceId` for this purpose.
 - **The facilitator cannot verify `invoiceId`** to enforce it is present — the payload is encrypted with the TEE's P-521 key, so the facilitator cannot read its contents. The match between `extra.invoiceId` and the payload's `invoice_id` is the **seller's responsibility**: after TEE processing, the seller checks the event's `invoice_id` against the one it originally set in the PaymentRequirements.
 
-## Settle Semantics: Submission, Not Completion
+## Settle Semantics: TEE-Confirmed Completion
 
-In the standard Coinbase x402 `exact` scheme, a successful `/settle` means the payment is complete (ERC-20 transferred directly). In our scheme, **a successful `/settle` means the request has been submitted on-chain** (`submitRequestFor()` confirmed) — and the request is queued for TEE processing. The actual private transfer inside vela-nova happens later, asynchronously.
+In the standard Coinbase x402 `exact` scheme, a successful `/settle` means the payment is complete (ERC-20 transferred directly). Our scheme matches that guarantee, even though the real transfer happens inside a TEE after on-chain submission:
 
-This means the seller's resource server should **not** treat a successful settle as proof of payment completion. Instead, the seller should wait for the vela-nova encrypted event containing the `invoice_id` to confirm the transfer was processed by the TEE. This is the seller's responsibility and is outside the scope of the facilitator service.
+1. `/settle` calls `ProcessorEndpoint.submitRequestFor()` and waits for the tx receipt.
+2. It recomputes the expected `AppEvent.eventSubType` hash: `keccak256(uint32_be(len(invoiceId)) || invoiceId || sender || tokenAddress || amount(32B) || recipient)` — the same hash vela-nova emits when the TEE successfully processes a transfer with that `invoiceId`.
+3. It polls the chain for a matching `AppEvent(applicationId, requestId, eventSubType)`. Only when one is observed does `/settle` return `success: true`.
 
-The on-chain submission is a strong guarantee: signatures are valid, nonce is consumed. The residual risk is that the user has insufficient balance inside vela-nova's privacy layer, in which case the TEE will process an error.
+Because the hash binds `invoiceId + sender + tokenAddress + amount + recipient`, a match is cryptographic proof the transfer landed exactly as specified in the `PaymentRequirements`. The seller doesn't need to re-verify anything: `success: true` is enough.
+
+On timeout (tunable via `APP_EVENT_POLL_INTERVAL_MS` / `APP_EVENT_POLL_TIMEOUT_MS`), `/settle` returns `success: false` with `errorReason: "tee_processing_timeout"`. The on-chain `requestId` is still reported in `extensions` so callers can reconcile later.
 
 ## Architecture Diagram
 

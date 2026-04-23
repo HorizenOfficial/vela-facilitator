@@ -25,6 +25,46 @@ Base URL: `http://<host>:<PORT>` (default port: `3000`)
 
 ---
 
+## GET /
+
+Landing page: live runtime info (facilitator address, RPC / chainId, `ProcessorEndpoint` address, scheme config) and the full endpoint directory. Intended as a dev sanity-check ("is it up, and how is it configured?") and as a discovery endpoint for tooling.
+
+**Request**: no body
+
+Responds based on the `Accept` header:
+
+- `Accept: text/html` (browser default) → HTML page.
+- `Accept: application/json` → structured JSON with the same content:
+
+```json
+{
+  "service": "vela-facilitator",
+  "description": "...",
+  "facilitator": { "address": "0x..." },
+  "chain": { "rpcUrl": "https://...", "chainId": 2651420, "network": "eip155:2651420" },
+  "contract": { "processorEndpoint": "0x..." },
+  "scheme": { "name": "private-vela-fixed", "applicationId": "1", "maxFeeValue": "0" },
+  "endpoints": [
+    { "method": "GET",  "path": "/",          "summary": "..." },
+    { "method": "GET",  "path": "/supported", "summary": "..." },
+    { "method": "POST", "path": "/verify",    "summary": "..." },
+    { "method": "POST", "path": "/settle",    "summary": "..." },
+    { "method": "POST", "path": "/submit",    "summary": "..." },
+    { "method": "POST", "path": "/claim",     "summary": "..." }
+  ]
+}
+```
+
+**Examples**:
+```bash
+curl http://localhost:3000/                                  # HTML page
+curl http://localhost:3000/ -H 'Accept: application/json'    # JSON
+```
+
+Only values already visible on-chain are exposed (facilitator address, RPC, contract addresses, application ID). No secrets.
+
+---
+
 ## GET /supported
 
 Returns the list of supported x402 payment schemes and networks.

@@ -82,7 +82,7 @@ const DEFAULTS = {
   TOKEN_ADDRESS: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
   // Anvil account #0 — pays gas for the mint tx
   FUNDER_PRIVATE_KEY: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
-  APPLICATION_ID: "16491951060767813337",
+  APPLICATION_ID: "9747039366101346037",
   SUBGRAPH_URL: "http://localhost:8000/subgraphs/name/hcce",
   // Deposit/transfer/withdraw amount (in smallest token unit, i.e. wei)
   AMOUNT: "100",
@@ -397,20 +397,26 @@ async function main() {
   console.log(`    seller balance increased by AMOUNT (${amount}) as expected.`);
 
   // Decrypt seller's private events via subgraph to confirm private-state changes.
-  // eventSubType is declared `string indexed` in the ProcessorEndpoint contract, so the
-  // topic (and subgraph `Bytes` field) is keccak256(utf8Bytes(name)), not the name itself.
+  // We don't filter by `eventSubType`:
+  //   * the vela-nova WASM leaves EventSubType unset (zero bytes) expecting the
+  //     executor to override it with a privacy-preserving HMAC derived from the
+  //     user's seed (registered via ASSOCIATEKEY with 226-byte payload);
+  //   * this smoke test registers ASSOCIATEKEY with just the P-521 pubkey (133
+  //     bytes, no seed), so on-chain events end up with eventSubType=0x00..00
+  //     regardless of the logical type ("transfer_received", "withdrawal").
+  // Instead, we pull all events for the applicationId and let decryption drop
+  // the ones not intended for the seller. The logical type is then read from
+  // the JSON body (the `type` field below).
   console.log(`\n[8] Decrypt seller's events via subgraph`);
   const subgraph = createSubgraphClient(subgraphUrl);
-  const subtypeHashes = ["transfer_received", "withdrawal"].map((n) =>
-    ethers.keccak256(ethers.toUtf8Bytes(n)),
-  );
   const sellerDecrypted = await fetchAndDecryptUserEvents(
     subgraph,
     teePublicKey,
     sellerKeyPair.privateKey,
     applicationId,
-    subtypeHashes,
-    0,
+    undefined, // requestId — no filter
+    [],        // eventSubType — no filter (see comment above)
+    0,         // limit (0 = no cap)
   );
   const sellerEvents = sellerDecrypted.map((b) => JSON.parse(bytesToString(b)));
   console.log(`    decrypted ${sellerEvents.length} events for seller:`);

@@ -6,6 +6,7 @@ Gasless request submission service for the [Vela blockchain platform](https://gi
 
 The facilitator acts as a gas relay: users sign EIP-712 typed messages and the facilitator submits the transactions on-chain, paying all gas. It exposes:
 
+- **`GET /`** — Landing page with live runtime info and the endpoint directory. HTML by default, JSON with `Accept: application/json`.
 - **`POST /submit`** — Application-agnostic gasless submission. Accepts any `ASSOCIATEKEY` or `PROCESS` request signed by the user and submits it to the `ProcessorEndpoint` contract.
 - **`POST /verify`** — x402 off-chain payment verification.
 - **`POST /settle`** — x402 on-chain settlement: calls `submitRequestFor()` and then **blocks until the TEE confirms the transfer** by emitting the matching `AppEvent`.

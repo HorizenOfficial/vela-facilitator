@@ -51,7 +51,9 @@ It hits `GET /supported`, `POST /submit` (ASSOCIATEKEY), `POST /verify`, and `PO
 
 | Method | Path | Description |
 |---|---|---|
+| `GET` | `/` | Landing page: runtime info + endpoint directory (HTML or JSON) |
 | `GET` | `/supported` | Supported x402 schemes and networks |
 | `POST` | `/verify` | Off-chain payment signature verification |
-| `POST` | `/settle` | On-chain settlement via `submitRequestFor()` |
+| `POST` | `/settle` | On-chain settlement via `submitRequestFor()`, blocks until the TEE emits the matching `AppEvent` |
 | `POST` | `/submit` | Application-agnostic gasless request submission |
+| `POST` | `/claim` | Permissionless claim of pending balances |

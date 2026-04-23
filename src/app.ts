@@ -5,6 +5,7 @@ import { registerPrivateVelaFixedScheme } from "@horizen/x402-private-vela-fixed
 import { createX402Router } from "./routes/x402.js";
 import { createSubmitRouter } from "./routes/submit.js";
 import { createClaimRouter } from "./routes/claim.js";
+import { createLandingRouter } from "./routes/landing.js";
 import type { ethers } from "ethers";
 import type { Config } from "./config.js";
 
@@ -25,6 +26,7 @@ export async function createApp(config: Config, provider: ethers.JsonRpcProvider
   const app = express();
   app.use(cors());
   app.use(express.json());
+  app.use("/", createLandingRouter(config, provider));
   app.use("/", createX402Router(facilitator));
   app.use("/", createSubmitRouter(config, signer));
   app.use("/", createClaimRouter(config, signer));
