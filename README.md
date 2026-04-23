@@ -96,9 +96,11 @@ pnpm build  # compile facilitator server
 
 ```bash
 # Set environment variables (see Configuration below)
-RPC_URL=http://127.0.0.1:8545 \
+CHAIN_RPC_PROTOCOL=http \
+CHAIN_RPC_ADDRESS=127.0.0.1 \
+CHAIN_RPC_PORT=8545 \
 FACILITATOR_PRIVATE_KEY=0x... \
-PROCESSOR_ENDPOINT_ADDRESS=0x... \
+CHAIN_PROCESSOR_ADDRESS=0x... \
 pnpm dev
 ```
 
@@ -134,8 +136,10 @@ Defaults target the vela dev stack (Anvil + `vela/dockerfiles/.env.dev`); overri
 | Variable | Default |
 |---|---|
 | `FACILITATOR_URL` | `http://localhost:3000` |
-| `RPC_URL` | `http://localhost:8545` |
-| `PROCESSOR_ENDPOINT_ADDRESS` | deterministic Anvil deploy address |
+| `CHAIN_RPC_PROTOCOL` | `http` |
+| `CHAIN_RPC_ADDRESS` | `localhost` |
+| `CHAIN_RPC_PORT` | `8545` |
+| `CHAIN_PROCESSOR_ADDRESS` | deterministic Anvil deploy address |
 | `TOKEN_ADDRESS` | `ZeroAddress` (fine for `assetAmount=0`) |
 | `TEE_PUBLIC_KEY_HEX` | dev TEE public key (from vela `.env.dev`) |
 | `BUYER_PRIVATE_KEY` | Anvil account #3 |
@@ -149,7 +153,7 @@ Prerequisites (not performed by the script):
 ```bash
 pnpm dev:smoke
 # or with overrides
-FACILITATOR_URL=http://localhost:3000 RPC_URL=http://dev-rpc:8545 pnpm dev:smoke
+FACILITATOR_URL=http://localhost:3000 CHAIN_RPC_PROTOCOL=http CHAIN_RPC_ADDRESS=dev-rpc CHAIN_RPC_PORT=8545 pnpm dev:smoke
 ```
 
 See [`scripts/dev-smoke.ts`](scripts/dev-smoke.ts) for the full list of overridable env vars.
@@ -160,9 +164,11 @@ All configuration is via environment variables:
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `RPC_URL` | yes | — | Ethereum JSON-RPC URL. The chain ID is derived from it at startup. |
+| `CHAIN_RPC_PROTOCOL` | yes | — | Ethereum JSON-RPC protocol (e.g. `http`, `https`, `ws`). Combined with address/port at startup. |
+| `CHAIN_RPC_ADDRESS` | yes | — | Ethereum JSON-RPC host. |
+| `CHAIN_RPC_PORT` | yes | — | Ethereum JSON-RPC port. The chain ID is derived from the resulting URL at startup. |
 | `FACILITATOR_PRIVATE_KEY` | yes | — | Hex private key of the facilitator's Ethereum wallet (pays gas) |
-| `PROCESSOR_ENDPOINT_ADDRESS` | yes | — | Address of the deployed `ProcessorEndpoint` contract |
+| `CHAIN_PROCESSOR_ADDRESS` | yes | — | Address of the deployed `ProcessorEndpoint` contract |
 | `MAX_FEE_VALUE` | no | `0` | ETH in wei sent as `msg.value` to cover service fees |
 | `VELA_NOVA_APPLICATION_ID` | no | `1` | vela-nova application ID, used for x402 payments |
 | `PORT` | no | `3000` | HTTP server port |

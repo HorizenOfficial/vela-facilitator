@@ -8,9 +8,11 @@ Gasless request submission service for the Vela blockchain platform. Accepts sig
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `RPC_URL` | yes | — | Ethereum JSON-RPC endpoint. The chain ID is derived from it at startup. |
+| `CHAIN_RPC_PROTOCOL` | yes | — | Ethereum JSON-RPC protocol (e.g. `http`, `https`). |
+| `CHAIN_RPC_ADDRESS` | yes | — | Ethereum JSON-RPC host. |
+| `CHAIN_RPC_PORT` | yes | — | Ethereum JSON-RPC port. The chain ID is derived from the resulting URL at startup. |
 | `FACILITATOR_PRIVATE_KEY` | yes | — | Private key of the facilitator wallet (pays gas) |
-| `PROCESSOR_ENDPOINT_ADDRESS` | yes | — | Address of the `ProcessorEndpoint` contract |
+| `CHAIN_PROCESSOR_ADDRESS` | yes | — | Address of the `ProcessorEndpoint` contract |
 | `PORT` | no | `3000` | HTTP server port |
 | `MAX_FEE_VALUE` | no | `50` | Maximum fee the facilitator pays per request (in base units) |
 | `VELA_NOVA_APPLICATION_ID` | no | `1` | Application ID forwarded in x402 settle calls |
@@ -348,7 +350,7 @@ All requests use EIP-712 typed data signing. The domain and type hash:
   "name": "Vela",
   "version": "0",
   "chainId": <chainId derived from RPC>,
-  "verifyingContract": "<PROCESSOR_ENDPOINT_ADDRESS>"
+  "verifyingContract": "<CHAIN_PROCESSOR_ADDRESS>"
 }
 ```
 

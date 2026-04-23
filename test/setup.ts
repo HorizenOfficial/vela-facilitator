@@ -64,9 +64,11 @@ export async function setup({ provide }: GlobalSetupContext) {
   });
 
   // Setup facilitator environment
-  process.env.RPC_URL = anvil.rpcUrl;
+  process.env.CHAIN_RPC_PROTOCOL = "http";
+  process.env.CHAIN_RPC_ADDRESS = "127.0.0.1";
+  process.env.CHAIN_RPC_PORT = String(anvil.port);
   process.env.FACILITATOR_PRIVATE_KEY = facilitatorAccount.privateKey;
-  process.env.PROCESSOR_ENDPOINT_ADDRESS = contracts.processorEndpoint.address;
+  process.env.CHAIN_PROCESSOR_ADDRESS = contracts.processorEndpoint.address;
   process.env.MAX_FEE_VALUE = "0";
   process.env.VELA_NOVA_APPLICATION_ID = "1";
   process.env.PORT = String(PORT);

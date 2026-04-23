@@ -2,6 +2,7 @@ import { ChildProcess, spawn } from "child_process";
 
 export interface AnvilInstance {
   rpcUrl: string;
+  port: number;
   chainId: number;
   accounts: AnvilAccount[];
   process: ChildProcess;
@@ -49,6 +50,7 @@ export async function startAnvil(port = 8545, chainId = 31337): Promise<AnvilIns
 
   return {
     rpcUrl,
+    port,
     chainId,
     accounts: ANVIL_DEFAULT_ACCOUNTS,
     process: anvilProcess,

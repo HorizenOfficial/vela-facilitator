@@ -18,9 +18,11 @@ Copy `.env.template` to `.env` and set the required variables:
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `RPC_URL` | yes | | Ethereum JSON-RPC endpoint. The chain ID is derived from it at startup. |
+| `CHAIN_RPC_PROTOCOL` | yes | | Ethereum JSON-RPC protocol (e.g. `http`, `https`). |
+| `CHAIN_RPC_ADDRESS` | yes | | Ethereum JSON-RPC host. |
+| `CHAIN_RPC_PORT` | yes | | Ethereum JSON-RPC port. The chain ID is derived from the resulting URL at startup. |
 | `FACILITATOR_PRIVATE_KEY` | yes | | Hex private key of the facilitator wallet (pays gas) |
-| `PROCESSOR_ENDPOINT_ADDRESS` | yes | | `ProcessorEndpoint` contract address |
+| `CHAIN_PROCESSOR_ADDRESS` | yes | | `ProcessorEndpoint` contract address |
 | `MAX_FEE_VALUE` | no | `50` | ETH in wei sent as `msg.value` for service fees |
 | `VELA_NOVA_APPLICATION_ID` | no | `1` | vela-nova application ID for x402 payments |
 | `PORT` | no | `3000` | HTTP server port |
@@ -45,7 +47,7 @@ Once the container is up you can run a quick HTTP smoke test from the repo root:
 pnpm dev:smoke
 ```
 
-It hits `GET /supported`, `POST /submit` (ASSOCIATEKEY), `POST /verify`, and `POST /settle`. Defaults match the vela dev stack; override `FACILITATOR_URL`, `RPC_URL`, `PROCESSOR_ENDPOINT_ADDRESS`, etc. to target a different environment. See the [root README](../README.md#dev-smoke-test) and [`scripts/dev-smoke.ts`](../scripts/dev-smoke.ts) for details.
+It hits `GET /supported`, `POST /submit` (ASSOCIATEKEY), `POST /verify`, and `POST /settle`. Defaults match the vela dev stack; override `FACILITATOR_URL`, `CHAIN_RPC_PROTOCOL`/`CHAIN_RPC_ADDRESS`/`CHAIN_RPC_PORT`, `CHAIN_PROCESSOR_ADDRESS`, etc. to target a different environment. See the [root README](../README.md#dev-smoke-test) and [`scripts/dev-smoke.ts`](../scripts/dev-smoke.ts) for details.
 
 ## Endpoints
 

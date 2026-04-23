@@ -24,9 +24,12 @@ export interface Config {
 }
 
 export function loadConfig(): Config {
-  const rpcUrl = requireEnv("RPC_URL");
+  const rpcProtocol = requireEnv("CHAIN_RPC_PROTOCOL");
+  const rpcAddress = requireEnv("CHAIN_RPC_ADDRESS");
+  const rpcPort = requireEnv("CHAIN_RPC_PORT");
+  const rpcUrl = `${rpcProtocol}://${rpcAddress}:${rpcPort}`;
   const privateKey = requireEnv("FACILITATOR_PRIVATE_KEY");
-  const contractAddress = requireEnv("PROCESSOR_ENDPOINT_ADDRESS");
+  const contractAddress = requireEnv("CHAIN_PROCESSOR_ADDRESS");
   const maxFeeValue = BigInt(getEnv("MAX_FEE_VALUE", "50"));
   const applicationId = BigInt(getEnv("VELA_NOVA_APPLICATION_ID", "1"));
   const port = parseInt(getEnv("PORT", "3000"), 10);
