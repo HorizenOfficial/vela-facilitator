@@ -1,10 +1,22 @@
 {
   "name": "@horizen/x402-private-vela-fixed",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "x402 private-vela-fixed scheme for facilitator, client, and resource server",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HorizenOfficial/vela-facilitator.git"
+  },
+  "keywords": [
+    "vela",
+    "x402",
+    "blockchain",
+    "ethereum",
+    "web3"
+  ],
+  "author": "Horizen",
   "scripts": {
     "build": "tsc",
     "test": "vitest run"
