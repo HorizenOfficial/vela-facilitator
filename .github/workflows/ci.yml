@@ -40,6 +40,9 @@ jobs:
       - name: Compile contracts
         run: pnpm --filter @vela-facilitator/contracts compile
 
+      - name: Build workspace packages
+        run: pnpm --filter @horizen/x402-private-vela-fixed build
+
       - name: Run tests
         run: pnpm test
 

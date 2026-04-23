@@ -8,6 +8,7 @@
     "dev": "tsx src/index.ts",
     "dev:smoke": "tsx scripts/dev-smoke.ts",
     "build": "tsc",
+    "pretest": "pnpm --filter @horizen/x402-private-vela-fixed build",
     "test": "vitest run",
     "test:watch": "vitest"
   },
