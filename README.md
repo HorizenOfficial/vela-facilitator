@@ -1,6 +1,7 @@
 # vela-facilitator
 
-Gasless request submission service for the [Vela blockchain platform](https://github.com/HorizenOfficial/vela/blob/main/docs/design/FACILITATOR.md). Allows users to submit requests (transfers, key association) without holding ETH by delegating gas and service fees to a facilitator.
+Gasless request submission service for the [Vela blockchain platform](https://github.com/HorizenOfficial/vela/blob/main/docs/design/FACILITATOR.md). 
+Allows users to submit requests (transfers, key association) without holding ETH by delegating gas and service fees to a facilitator.
 
 ## Overview
 
