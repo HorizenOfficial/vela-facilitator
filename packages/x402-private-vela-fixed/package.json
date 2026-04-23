@@ -1,6 +1,6 @@
 {
   "name": "@horizen/x402-private-vela-fixed",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "x402 private-vela-fixed scheme for facilitator, client, and resource server",
   "type": "module",
   "main": "./dist/index.js",
