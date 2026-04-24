@@ -2,9 +2,7 @@ name: CI
 
 on:
   push:
-    # TEMPORARY: pc/HZN-2838 added to validate the pipeline end-to-end before merging.
-    # Remove it once validated.
-    branches: [main, dev, pc/HZN-2838]
+    branches: [main, dev]
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+*'
   pull_request:
@@ -75,9 +73,7 @@ jobs:
       - name: Determine release type
         env:
           MAINTAINERS_KEYS: ${{ vars.MAINTAINERS_KEYS }}
-          # TEMPORARY: publishing prod releases from branch pc/HZN-2838 to validate
-          # the pipeline end-to-end before merging. Revert to `main` once validated.
-          PROD_RELEASE_BRANCH: pc/HZN-2838
+          PROD_RELEASE_BRANCH: main
           DEV_RELEASE_BRANCH: dev
         run: source "${GITHUB_WORKSPACE}/ci/setup_env.sh"
 
