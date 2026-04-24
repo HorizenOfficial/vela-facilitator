@@ -1,0 +1,18 @@
+services:
+  facilitator:
+    container_name: vela-facilitator
+    build:
+      context: ..
+      dockerfile: dockerfiles/Dockerfile
+    env_file: .env
+    ports:
+      - "${PORT:-3000}:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/supported"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

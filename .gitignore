@@ -1,0 +1,40 @@
+# Private local config
+CLAUDE.local.md
+.claude/
+.env
+
+# Dependencies
+node_modules/
+packages/x402-private-vela-fixed/node_modules/
+packages/contracts/node_modules/
+
+# Build output
+dist/
+*.d.ts
+*.d.ts.map
+*.js.map
+packages/x402-private-vela-fixed/dist/
+packages/x402-private-vela-fixed/src/*.js
+packages/x402-private-vela-fixed/src/*.js.map
+packages/x402-private-vela-fixed/src/*.d.ts
+packages/x402-private-vela-fixed/src/*.d.ts.map
+
+# Hardhat / Solidity
+packages/contracts/artifacts/
+packages/contracts/cache/
+packages/contracts/typechain-types/
+
+# Compiled test + mock helpers (vitest transforms .ts directly)
+test/**/*.js
+test/**/*.js.map
+test/**/*.d.ts
+test/**/*.d.ts.map
+mock/*.js
+mock/*.js.map
+mock/*.d.ts
+mock/*.d.ts.map
+
+# Vitest / Vite cache
+.vitest-cache/
+node_modules/.vite/
+node_modules/.cache/
