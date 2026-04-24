@@ -1,0 +1,16 @@
+node_modules
+dist
+.env
+.git
+.gitignore
+.dockerignore
+.claude
+.vitest-cache
+test
+mock
+packages/contracts/artifacts
+packages/contracts/cache
+packages/contracts/typechain-types
+dockerfiles
+CLAUDE.md
+CLAUDE.local.md
