@@ -1,6 +1,6 @@
 {
   "name": "vela-facilitator",
-  "version": "0.0.1",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "Gasless request submission service for the Vela blockchain platform",
@@ -20,7 +20,7 @@
     "cors": "2.8.5"
   },
   "devDependencies": {
-    "@horizen/vela-common-ts": "0.1.0",
+    "@horizen/vela-common-ts": "0.1.1",
     "@types/cors": "2.8.17",
     "@types/express": "4.17.21",
     "@types/node": "22.13.4",
