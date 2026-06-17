@@ -15,20 +15,28 @@ interface EndpointDescriptor {
 
 const ENDPOINTS: EndpointDescriptor[] = [
   { method: "GET",  path: "/",          summary: "Service info and endpoint directory (this page)." },
+  { method: "POST", path: "/submit",    summary: "Application-agnostic gasless request submission (ASSOCIATEKEY, PROCESS)." },
+  { method: "POST", path: "/claim",     summary: "Permissionless claim of pending balances on ProcessorEndpoint." },
   { method: "GET",  path: "/supported", summary: "x402: supported schemes and networks." },
   { method: "POST", path: "/verify",    summary: "x402: off-chain payment verification." },
   { method: "POST", path: "/settle",    summary: "x402: on-chain settlement; blocks until the TEE emits the matching AppEvent." },
-  { method: "POST", path: "/submit",    summary: "Application-agnostic gasless request submission (ASSOCIATEKEY, PROCESS)." },
-  { method: "POST", path: "/claim",     summary: "Permissionless claim of pending balances on ProcessorEndpoint." },
+
 ];
 
 interface ServiceInfo {
   service: string;
   description: string;
+  vela: {
+    version: string | null;
+    network: string | null;
+    chainId: number | null;
+    rpcUrl: string;
+    processorEndpoint: string;
+    explorerBaseUrl: string | null;
+    maxFeeValue: string;
+  };
   facilitator: { address: string };
-  chain: { rpcUrl: string; chainId: number | null; network: string | null };
-  contract: { processorEndpoint: string };
-  scheme: { name: string; applicationId: string; maxFeeValue: string };
+  scheme: { name: string; applicationId: string };
   endpoints: EndpointDescriptor[];
 }
 
@@ -53,18 +61,20 @@ export function createLandingRouter(config: Config, provider: ethers.JsonRpcProv
     const info: ServiceInfo = {
       service: "vela-facilitator",
       description:
-        "Gasless facilitator for the Vela blockchain, with endpoints compatibles with x402 payment standard. Submits signed user requests on-chain via ProcessorEndpoint.submitRequestFor() and pays gas on their behalf.",
-      facilitator: { address: config.signer.address },
-      chain: {
-        rpcUrl: config.rpcUrl,
-        chainId,
+        "A gasless facilitator for Vela is available, with endpoints compatible with x402 payment standard. \nIt submits signed user requests on-chain via ProcessorEndpoint.submitRequestFor() and pays gas on their behalf.",
+      vela: {
+        version: config.velaVersion,
         network: chainId != null ? `eip155:${chainId}` : null,
+        chainId,
+        rpcUrl: config.rpcUrl,
+        processorEndpoint: config.contractAddress,
+        explorerBaseUrl: config.explorerBaseUrl,
+        maxFeeValue: config.maxFeeValue.toString(),
       },
-      contract: { processorEndpoint: config.contractAddress },
+      facilitator: { address: config.signer.address },
       scheme: {
         name: "private-vela-fixed",
         applicationId: config.applicationId.toString(),
-        maxFeeValue: config.maxFeeValue.toString(),
       },
       endpoints: ENDPOINTS,
     };
@@ -110,7 +120,7 @@ function renderHtml(info: ServiceInfo): string {
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>${esc(info.service)}</title>
+<title>Horizen Vela</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <style>
   :root {
@@ -152,21 +162,32 @@ function renderHtml(info: ServiceInfo): string {
 </head>
 <body>
 <main>
-  <h1>${esc(info.service)}</h1>
-  <p class="tagline">${esc(info.description)}</p>
-
-  <h2>Info</h2>
+  <h1>Horizen Vela</h1>
   <dl>
-    <dt>Facilitator public wallet address</dt><dd>${esc(info.facilitator.address)}</dd>
-    <dt>Network</dt><dd>${esc(info.chain.network)}${info.chain.chainId != null ? ` (chainId ${esc(info.chain.chainId)})` : ""}</dd>
-    <dt>RPC used by the facilitator</dt><dd>${esc(info.chain.rpcUrl)}</dd>
-    <dt>ProcessorEndpoint</dt><dd>${esc(info.contract.processorEndpoint)}</dd>
-    <dt>x402 scheme Name</dt><dd>${esc(info.scheme.name)}</dd>
-    <dt>x402 Nova applicationId</dt><dd>${esc(info.scheme.applicationId)}</dd>
-    <dt>maxFeeValue</dt><dd>${esc(info.scheme.maxFeeValue)} wei</dd>
+    <dt>Version</dt><dd>${esc(info.vela.version)}</dd>
+    <dt>ProcessorEndpoint</dt><dd><a href="${esc(info.vela.explorerBaseUrl)}/address/${esc(info.vela.processorEndpoint)}" target="_blank" rel="noopener noreferrer">${esc(info.vela.processorEndpoint)}</a></dd>
+    <dt>Network</dt><dd>${esc(info.vela.network)}${info.vela.chainId != null ? ` (chainId ${esc(info.vela.chainId)})` : ""}</dd>
+    <dt>Network RPC</dt><dd>${esc(info.vela.rpcUrl)}</dd>
+    <dt>Git repos:</dt><dd>
+    Developer starter kit: <a href="https://github.com/HorizenOfficial/vela-starterkit">https://github.com/HorizenOfficial/vela-starterkit</a><br/>
+    Client TypeScript library: <a href="https://github.com/HorizenOfficial/vela-common-ts">https://github.com/HorizenOfficial/vela-common-ts</a><br/>
+    Framework repository: <a href="https://github.com/HorizenOfficial/vela">https://github.com/HorizenOfficial/vela</a><br/>
+    Comon GO library: <a href="https://github.com/HorizenOfficial/vela-common-go">https://github.com/HorizenOfficial/vela-common-go</a><br/>
+    
+    </dd>
   </dl>
 
-  <h2>Endpoints</h2>
+
+
+  <h2>Facilitator service:</h2>
+  <p class="tagline">${esc(info.description)}</p>
+  <dl>
+    <dt>Facilitator public wallet address</dt><dd>${esc(info.facilitator.address)}</dd>
+    <dt>x402 scheme Name</dt><dd>${esc(info.scheme.name)}</dd>
+    <dt>x402 Nova applicationId</dt><dd>${esc(info.scheme.applicationId)}</dd>
+  </dl>
+
+  <h2>Facilitator endpoints</h2>
   <table>${endpointRows}
   </table>
 

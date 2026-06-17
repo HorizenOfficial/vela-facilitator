@@ -19,6 +19,8 @@ export interface Config {
   maxFeeValue: bigint;
   applicationId: bigint;
   port: number;
+  velaVersion: string | null;
+  explorerBaseUrl: string | null;
   appEventPollIntervalMs?: number;
   appEventPollTimeoutMs?: number;
 }
@@ -33,6 +35,8 @@ export function loadConfig(): Config {
   const maxFeeValue = BigInt(getEnv("MAX_FEE_VALUE", "50"));
   const applicationId = BigInt(getEnv("VELA_NOVA_APPLICATION_ID", "1"));
   const port = parseInt(getEnv("PORT", "3000"), 10);
+  const velaVersion = process.env.FACILITATOR_VELA_VERSION ?? null;
+  const explorerBaseUrl = process.env.FACILITATOR_EXPLORER_BASEURL ?? null;
   const appEventPollIntervalMs = process.env.APP_EVENT_POLL_INTERVAL_MS
     ? parseInt(process.env.APP_EVENT_POLL_INTERVAL_MS, 10)
     : undefined;
@@ -49,6 +53,8 @@ export function loadConfig(): Config {
     maxFeeValue,
     applicationId,
     port,
+    velaVersion,
+    explorerBaseUrl,
     appEventPollIntervalMs,
     appEventPollTimeoutMs,
   };
