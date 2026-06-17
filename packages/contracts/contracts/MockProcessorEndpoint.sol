@@ -277,7 +277,7 @@ contract MockProcessorEndpoint is ReentrancyGuard {
             if (payload.length != 133 && payload.length != 226) revert InvalidPayload();
         }
 
-        bytes32 requestId = _generateRequestId(msg.sender, applicationId, requestType, payload, tokenAddress, assetAmount, _requestCount);
+        bytes32 requestId = _generateRequestId(msg.sender, applicationId, requestType, keccak256(payload), tokenAddress, assetAmount, _requestCount);
 
         requestById[requestId] = Structs.PendingRequest({
             timestamp: block.timestamp,
@@ -392,7 +392,7 @@ contract MockProcessorEndpoint is ReentrancyGuard {
             token.safeTransferFrom(sender, address(this), assetAmount);
         }
 
-        bytes32 requestId = _generateRequestId(sender, applicationId, requestType, payload, tokenAddress, assetAmount, _requestCount);
+        bytes32 requestId = _generateRequestId(sender, applicationId, requestType, payloadHash, tokenAddress, assetAmount, _requestCount);
 
         requestById[requestId] = Structs.PendingRequest({
             timestamp: block.timestamp,
@@ -423,13 +423,13 @@ contract MockProcessorEndpoint is ReentrancyGuard {
         address sender,
         uint64 applicationId,
         Structs.RequestType requestType,
-        bytes calldata payload,
+        bytes32 payloadHash,
         address tokenAddress,
         uint256 assetAmount,
         uint256 idx
     ) internal pure returns (bytes32) {
         return keccak256(
-            abi.encode(sender, applicationId, requestType, payload, tokenAddress, assetAmount, idx)
+            abi.encode(sender, applicationId, requestType, payloadHash, tokenAddress, assetAmount, idx)
         );
     }
 
