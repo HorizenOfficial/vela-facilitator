@@ -1,9 +1,8 @@
 packages:
   - "packages/*"
 
-# Allow build (postinstall) scripts only for these trusted packages. pnpm 10+
-# blocks all build scripts by default; without this, CI prints ERR_PNPM_IGNORED_BUILDS.
-onlyBuiltDependencies:
-  - esbuild
-  - keccak
-  - secp256k1
+# Custom pnpm (supply-chain policy) requires explicit per-package build approval.
+allowBuilds:
+  esbuild: true
+  keccak: true
+  secp256k1: true
