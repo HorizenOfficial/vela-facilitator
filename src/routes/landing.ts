@@ -7,20 +7,116 @@ import { Config } from "../config.js";
  * printed by the landing page and served as JSON under `Accept: application/json`.
  * Keep in sync when mounting new routes in src/app.ts.
  */
+interface EndpointParam {
+  name: string;
+  desc: string;
+}
+
 interface EndpointDescriptor {
   method: string;
   path: string;
   summary: string;
+  /** Human note about the request body (e.g. "no body", or the JSON shape). */
+  request?: string;
+  /** Request body / query parameters. */
+  params?: EndpointParam[];
+  /** Compact example request body or invocation. */
+  example?: string;
 }
 
 const ENDPOINTS: EndpointDescriptor[] = [
-  { method: "GET",  path: "/",          summary: "Service info and endpoint directory (this page)." },
-  { method: "POST", path: "/submit",    summary: "Application-agnostic gasless request submission (ASSOCIATEKEY, PROCESS)." },
-  { method: "POST", path: "/claim",     summary: "Permissionless claim of pending balances on ProcessorEndpoint." },
-  { method: "GET",  path: "/supported", summary: "x402: supported schemes and networks." },
-  { method: "POST", path: "/verify",    summary: "x402: off-chain payment verification." },
-  { method: "POST", path: "/settle",    summary: "x402: on-chain settlement; blocks until the TEE emits the matching AppEvent." },
-
+  {
+    method: "GET",
+    path: "/",
+    summary: "Service info and endpoint directory (this page).",
+    request: "No body. Send `Accept: application/json` for a machine-readable view.",
+  },
+  {
+    method: "POST",
+    path: "/submit",
+    summary: "Application-agnostic gasless request submission (ASSOCIATEKEY, PROCESS).",
+    request:
+      "JSON body with an EIP-712 RequestAuthorization signed by the user. The nonce is read from `facilitatorNonces[sender]` on-chain by the client before signing (no nonce endpoint).",
+    params: [
+      { name: "protocolVersion", desc: "Protocol version (currently 0)." },
+      { name: "applicationId", desc: "Target application ID" },
+      { name: "sender", desc: "User address that signed the request." },
+      { name: "requestType", desc: "1 = PROCESS, 3 = ASSOCIATEKEY (only these two are accepted)." },
+      {
+        name: "payload",
+        desc: "Hex bytes. ASSOCIATEKEY: raw 133-byte P-521 pubkey (0x04 || x || y). PROCESS: ECIES-encrypted PayloadInstructions (app specific format).",
+      },
+      { name: "tokenAddress", desc: "ERC-20 address, or address(0) when assetAmount = 0." },
+      { name: "assetAmount", desc: "Token amount in base units, as a string." },
+      { name: "deadline", desc: "Unix timestamp after which the signature is rejected." },
+      { name: "requestSignature", desc: "EIP-712 RequestAuthorization signature (hex)." },
+      { name: "depositPermit", desc: "EIP-2612 permit { v, r, s } when assetAmount > 0, otherwise null." },
+    ],
+    example: `{
+  "sender": "0xUSER",
+  "protocolVersion": 0,
+  "applicationId": 1,
+  "requestType": 3,
+  "payload": "0x04...133bytes",
+  "tokenAddress": "0x0000000000000000000000000000000000000000",
+  "assetAmount": "0",
+  "deadline": "1711929600",
+  "requestSignature": "0x...",
+  "depositPermit": null
+}
+// → 200 { "requestId": "0x..." }`,
+  },
+  {
+    method: "POST",
+    path: "/claim",
+    summary: "Permissionless claim of pending balances on ProcessorEndpoint.",
+    request:
+      "JSON body. Anyone can call it — funds are always sent to `payee`, so there is no auth risk. If nothing is pending, it is a no-op returning amount \"0\".",
+    params: [
+      { name: "tokenAddress", desc: "ERC-20 address, or address(0) for ETH." },
+      { name: "payee", desc: "Address that will receive the pending balance." },
+    ],
+    example: `{
+  "tokenAddress": "0xTOKEN",
+  "payee": "0xPAYEE"
+}
+// → 200 { "amount": "1000000", "transaction": "0x..." }`,
+  },
+  {
+    method: "GET",
+    path: "/supported",
+    summary: "x402: supported schemes and networks.",
+    request: "No body.",
+    example: `// → 200
+{ "schemes": [ { "scheme": "private-vela-fixed", "network": "eip155:<chainId>" } ] }`,
+  },
+  {
+    method: "POST",
+    path: "/verify",
+    summary: "x402: off-chain payment verification.",
+    request:
+      "x402 JSON body. Checks the EIP-712 signature, deadline, nonce and permit off-chain — no transaction is sent.",
+    params: [
+      { name: "paymentPayload", desc: "x402 payload: { x402Version, accepted, payload: { sender, requestSignature, depositPermit, requestAuthorization, payload } }." },
+      { name: "paymentRequirements", desc: "x402 requirements: { scheme, network, asset, amount, payTo, maxTimeoutSeconds, extra: { invoiceId } }." },
+    ],
+    example: `{ "paymentPayload": { ... }, "paymentRequirements": { ... } }
+// → 200 { "isValid": true }  |  { "isValid": false, "invalidReason": "..." }`,
+  },
+  {
+    method: "POST",
+    path: "/settle",
+    summary: "x402: on-chain settlement; blocks until the TEE emits the matching AppEvent.",
+    request:
+      "Same body shape as /verify. Calls ProcessorEndpoint.submitRequestFor(), then polls for the matching AppEvent (eventSubType = keccak256(len(invoiceId)||invoiceId||sender||token||amount||recipient)). Tunable via APP_EVENT_POLL_INTERVAL_MS / APP_EVENT_POLL_TIMEOUT_MS.",
+    params: [
+      { name: "paymentPayload", desc: "Same as /verify." },
+      { name: "paymentRequirements", desc: "Same as /verify." },
+    ],
+    example: `{ "paymentPayload": { ... }, "paymentRequirements": { ... } }
+// → 200 (confirmed) { "success": true, "transaction": "0x...", "extensions": { "requestId": "0x...", "eventSubType": "0x..." } }
+// → 200 (timeout)   { "success": false, "errorReason": "tee_processing_timeout", "extensions": { "requestId": "0x..." } }`,
+  },
 ];
 
 interface ServiceInfo {
@@ -104,16 +200,35 @@ function esc(s: string | number | null): string {
   });
 }
 
+/** Escape, then turn `inline code` markdown spans into <code> elements. */
+function inlineText(s: string): string {
+  return esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
+}
+
 function renderHtml(info: ServiceInfo): string {
-  const endpointRows = info.endpoints
-    .map(
-      (e) => `
-      <tr>
-        <td class="method method-${e.method.toLowerCase()}">${esc(e.method)}</td>
-        <td class="path"><code>${esc(e.path)}</code></td>
-        <td>${esc(e.summary)}</td>
-      </tr>`,
-    )
+  const endpointBlocks = info.endpoints
+    .map((e) => {
+      const hasDetail = e.request || (e.params && e.params.length) || e.example;
+      const paramsHtml =
+        e.params && e.params.length
+          ? `<dl class="params">${e.params
+              .map((p) => `<dt><code>${esc(p.name)}</code></dt><dd>${inlineText(p.desc)}</dd>`)
+              .join("")}</dl>`
+          : "";
+      const requestHtml = e.request ? `<p>${inlineText(e.request)}</p>` : "";
+      const exampleHtml = e.example ? `<pre>${esc(e.example)}</pre>` : "";
+      const summary = `<summary>
+        <span class="method method-${e.method.toLowerCase()}">${esc(e.method)}</span>
+        <code class="path">${esc(e.path)}</code>
+        <span class="ep-summary">${esc(e.summary)}</span>
+      </summary>`;
+      if (!hasDetail) {
+        return `<details class="endpoint">${summary}</details>`;
+      }
+      return `<details class="endpoint">${summary}
+        <div class="ep-detail">${requestHtml}${paramsHtml}${exampleHtml}</div>
+      </details>`;
+    })
     .join("");
 
   return `<!DOCTYPE html>
@@ -155,6 +270,43 @@ function renderHtml(info: ServiceInfo): string {
   .method-get { color: var(--get); }
   .method-post { color: var(--post); }
   .path code { font-family: ui-monospace, monospace; font-size: 0.9rem; background: transparent; padding: 0; }
+  .hint { color: var(--muted); font-size: 0.85rem; margin: 0 0 0.25rem; }
+  .endpoints { margin-top: 0.25rem; }
+  .endpoint { border-top: 1px solid var(--border); }
+  .endpoint:first-child { border-top: none; }
+  .endpoint > summary {
+    padding: 0.55rem 0.25rem;
+    cursor: pointer;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: baseline;
+    list-style: none;
+  }
+  .endpoint > summary::-webkit-details-marker { display: none; }
+  .endpoint > summary::before { content: "\\25B8"; color: var(--muted); font-size: 0.75rem; flex: none; }
+  .endpoint[open] > summary::before { content: "\\25BE"; }
+  .endpoint > summary .method { flex: none; width: 3rem; }
+  .endpoint > summary .path { flex: none; width: 7rem; }
+  .endpoint > summary:hover .ep-summary { color: var(--fg); }
+  .ep-summary { color: var(--muted); flex: 1 1 14rem; }
+  .ep-detail { padding: 0 0.25rem 1rem 1.5rem; }
+  .ep-detail > p { margin: 0.25rem 0 0.75rem; color: var(--fg); }
+  .params { row-gap: 0.4rem; margin: 0 0 0.75rem; }
+  .params dt { font-family: ui-monospace, monospace; color: var(--fg); }
+  .params dt code { font-size: 0.85rem; }
+  .params dd { font-family: inherit; font-size: 0.9rem; color: var(--muted); word-break: normal; }
+  pre {
+    background: #f0f0f0;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.75rem;
+    margin: 0;
+    overflow-x: auto;
+    font-family: ui-monospace, monospace;
+    font-size: 0.78rem;
+    line-height: 1.45;
+  }
   footer { margin-top: 2.5rem; color: var(--muted); font-size: 0.85rem; }
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
@@ -188,8 +340,9 @@ function renderHtml(info: ServiceInfo): string {
   </dl>
 
   <h2>Facilitator endpoints</h2>
-  <table>${endpointRows}
-  </table>
+  <p class="hint">Click an endpoint to see its parameters and an example.</p>
+  <div class="endpoints">${endpointBlocks}
+  </div>
 
   <footer>
     Send <code>Accept: application/json</code> to this endpoint for a machine-readable view.
