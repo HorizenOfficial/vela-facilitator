@@ -475,7 +475,7 @@ function renderHtml(info: ServiceInfo): string {
     </section>
 
     <section id="view-codebase" class="view" hidden>
-      <h2>GitHub reposositories:</h2>
+      <h2>GitHub repositories:</h2>
       <p class="tagline">The Vela project codebase is available in the following public repositories: </p>
       <dl>
         <dt>Developer starter kit</dt><dd><a href="https://github.com/HorizenOfficial/vela-starterkit" target="_blank" rel="noopener noreferrer">https://github.com/HorizenOfficial/vela-starterkit</a></dd>
