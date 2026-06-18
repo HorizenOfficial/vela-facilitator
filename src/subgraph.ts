@@ -22,6 +22,9 @@ export interface NormalizedEvent {
  * Each entry maps a subgraph collection (the plural query field) to the fields
  * we select and how to turn a row into a NormalizedEvent.details string.
  */
+/** Formats a token amount as "<value> <symbol>" given a chain's token table. */
+type TokenFormatter = (tokenAddress: unknown, amountRaw: unknown) => string;
+
 interface EventSource {
   /** Plural query field on the subgraph, e.g. "requestSubmitteds". */
   collection: string;
@@ -29,14 +32,53 @@ interface EventSource {
   type: string;
   /** Extra fields (beyond blockNumber/blockTimestamp) to select. */
   fields: string[];
-  /** Build the details one-liner from a row. */
-  details: (row: Record<string, unknown>) => string;
+  /** Build the details one-liner from a row. `fmt` resolves token amounts/symbols. */
+  details: (row: Record<string, unknown>, fmt: TokenFormatter) => string;
 }
+
+interface TokenInfo {
+  symbol: string;
+  decimals: number;
+}
+
+/**
+ * Hardcoded token metadata per chainId. The subgraph only exposes raw addresses
+ * and base-unit amounts, so we map them to human symbols/decimals here.
+ * Addresses MUST be lowercase (subgraph returns them lowercased).
+ */
+const TOKENS_BY_CHAIN: Record<number, Record<string, TokenInfo>> = {
+  // Base Sepolia
+  84532: {
+    "0x036cbd53842c5426634e7929541ec2318f3dcf7e": { symbol: "USDC", decimals: 6 },
+    "0x0000000000000000000000000000000000000000": { symbol: "ETH", decimals: 18 },
+  },
+};
 
 const short = (hex: unknown): string => {
   const s = String(hex ?? "");
   return s.length > 12 ? `${s.slice(0, 8)}…${s.slice(-6)}` : s;
 };
+
+/** Divide a base-unit integer string by 10^decimals, trimming trailing zeros. */
+function formatUnits(raw: string, decimals: number): string {
+  const neg = raw.startsWith("-");
+  let digits = raw.replace(/[^0-9]/g, "") || "0";
+  if (decimals === 0) return (neg ? "-" : "") + digits;
+  digits = digits.padStart(decimals + 1, "0");
+  const intPart = digits.slice(0, digits.length - decimals).replace(/^0+(?=\d)/, "");
+  const frac = digits.slice(digits.length - decimals).replace(/0+$/, "");
+  return (neg ? "-" : "") + intPart + (frac ? `.${frac}` : "");
+}
+
+/** Build a token formatter bound to the given chain's token table. */
+function makeTokenFormatter(chainId: number | null): TokenFormatter {
+  const tokens = chainId != null ? TOKENS_BY_CHAIN[chainId] : undefined;
+  return (tokenAddress, amountRaw) => {
+    const raw = String(amountRaw ?? "0");
+    const info = tokens?.[String(tokenAddress ?? "").toLowerCase()];
+    return info ? `${formatUnits(raw, info.decimals)} ${info.symbol}` : `${raw} of ${short(tokenAddress)}`;
+  };
+}
 
 const status = (row: Record<string, unknown>): string => {
   const code = Number(row.status);
@@ -45,8 +87,8 @@ const status = (row: Record<string, unknown>): string => {
   return `✗ failed (error ${String(row.errorCode ?? code)})${msg}`;
 };
 
-const amount = (row: Record<string, unknown>, to: string): string =>
-  `${String(row.amount)} of ${short(row.tokenAddress)} → ${short(row[to])}`;
+const transfer = (row: Record<string, unknown>, fmt: TokenFormatter, to: string): string =>
+  `${fmt(row.tokenAddress, row.amount)} → ${short(row[to])}`;
 
 const SOURCES: EventSource[] = [
   {
@@ -77,19 +119,19 @@ const SOURCES: EventSource[] = [
     collection: "onChainRefunds",
     type: "OnChainRefund",
     fields: ["requestId", "to", "tokenAddress", "amount"],
-    details: (r) => amount(r, "to"),
+    details: (r, fmt) => transfer(r, fmt, "to"),
   },
   {
     collection: "onChainWithdrawals",
     type: "OnChainWithdrawal",
     fields: ["requestId", "to", "tokenAddress", "amount"],
-    details: (r) => amount(r, "to"),
+    details: (r, fmt) => transfer(r, fmt, "to"),
   },
   {
     collection: "claimExecuteds",
     type: "ClaimExecuted",
     fields: ["payee", "tokenAddress", "amount"],
-    details: (r) => amount(r, "payee"),
+    details: (r, fmt) => transfer(r, fmt, "payee"),
   },
   {
     collection: "tokenAlloweds",
@@ -112,9 +154,11 @@ const SOURCES: EventSource[] = [
  */
 export async function fetchLatestEvents(
   subgraphUrl: string,
+  chainId: number | null,
   limit = 20,
   timeoutMs = 4000,
 ): Promise<NormalizedEvent[]> {
+  const fmt = makeTokenFormatter(chainId);
   const query = `{
 ${SOURCES.map(
     (s) =>
@@ -152,7 +196,7 @@ ${SOURCES.map(
         timestamp: Number(row.blockTimestamp),
         blockNumber: Number(row.blockNumber),
         requestId: row.requestId ? String(row.requestId) : undefined,
-        details: src.details(row),
+        details: src.details(row, fmt),
       });
     }
   }

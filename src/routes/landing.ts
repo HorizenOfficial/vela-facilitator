@@ -161,7 +161,7 @@ export function createLandingRouter(config: Config, provider: ethers.JsonRpcProv
     let events: NormalizedEvent[] | null = null;
     if (config.subgraphUrl) {
       try {
-        events = await fetchLatestEvents(config.subgraphUrl, 20);
+        events = await fetchLatestEvents(config.subgraphUrl, chainId, 20);
       } catch {
         // Best-effort: a slow/unreachable subgraph must not break the page.
         events = null;
@@ -221,6 +221,16 @@ function inlineText(s: string): string {
   return esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
 }
 
+/** Friendly chain names; falls back to the eip155 network string for unknown chains. */
+const CHAIN_NAMES: Record<number, string> = {
+  84532: "Base Sepolia Testnet",
+};
+
+function networkLabel(chainId: number | null, network: string | null): string | null {
+  if (chainId != null && CHAIN_NAMES[chainId]) return CHAIN_NAMES[chainId];
+  return network;
+}
+
 /** Format Unix seconds as a compact UTC timestamp, e.g. "2026-06-15 09:25:12 UTC". */
 function formatTime(unixSeconds: number): string {
   return `${new Date(unixSeconds * 1000).toISOString().slice(0, 19).replace("T", " ")} UTC`;
@@ -257,7 +267,7 @@ function renderEvents(events: NormalizedEvent[] | null, explorerBaseUrl: string 
 
 /** Favicon (48×48 PNG), embedded so the page is self-contained — matches vela.horizenlabs.io. */
 const FAVICON_DATA_URI =
-  "data:image/png;base64,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";
+  "data:image/png;base64,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";
 
 /** Horizen Labs wordmark (inline SVG so it inherits the page and needs no extra request). */
 const HORIZEN_LOGO_SVG = `<svg viewBox="0 0 170 40" fill="#041742" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M18.4369 0.257324V7.8207C20.7344 7.43097 23.062 7.23555 25.3938 7.23635C26.7737 7.23635 28.1376 7.30175 29.4856 7.43273V0.257324H18.4369Z"/><path d="M18.4369 20.9609V39.7946L29.4856 32.6051V20.3485C28.1564 20.1548 26.8144 20.058 25.4705 20.0586C23.0958 20.061 20.7314 20.3644 18.4369 20.9609Z"/><path d="M0.0191956 32.5957L11.0679 39.7852V21.7461C6.44115 24.3137 2.62068 28.0652 0.0191956 32.5957Z"/><path d="M11.0679 0.257324H0.0191956V13.6406C3.38396 11.169 7.10779 9.20125 11.0679 7.80203V0.257324Z"/><path d="M25.3299 8.63825H25.3938C26.2825 8.63825 27.1709 8.6668 28.0483 8.72328V16.7745C27.1596 16.6982 26.2663 16.6598 25.378 16.6598C20.1232 16.6598 14.9297 17.9966 10.3587 20.5261C6.90645 22.4369 3.88081 24.9757 1.43744 27.9899V16.6808C8.23303 11.49 16.6901 8.63825 25.3299 8.63825ZM25.3299 7.236C16.1053 7.236 7.16218 10.3318 0 16.0054V32.5953C2.60672 28.0622 6.43406 24.3106 11.0678 21.7457C15.4513 19.3202 20.3851 18.062 25.378 18.062C26.7463 18.062 28.1186 18.1565 29.4856 18.3473V7.43222C28.1409 7.30141 26.7768 7.23584 25.3938 7.23584C25.3729 7.23584 25.3507 7.236 25.3299 7.236Z"/><path d="M42.7767 39.7849V28.5659H44.7938V38.0553H49.8678V39.7895L42.7767 39.7849Z"/><path d="M70.4274 39.7849L69.5841 37.63H64.3136L63.4655 39.7849H61.1752L65.6933 28.5659H68.2088L72.727 39.7849H70.4274ZM66.944 30.548L64.879 35.919H69.0139L66.944 30.548Z"/><path d="M84.346 39.7849V28.5659H90.0189C92.1224 28.5659 93.2962 29.8468 93.2962 31.4267C93.3553 32.6439 92.5114 33.7273 91.2935 33.9977C92.6173 34.281 93.5507 35.4384 93.5214 36.7604C93.5214 38.49 92.3284 39.7895 90.1674 39.7895L84.346 39.7849ZM91.2119 31.7587C91.2379 30.9718 90.605 30.3132 89.7984 30.2879C89.7297 30.2856 89.6609 30.2883 89.5925 30.2955H86.368V33.2031H89.5925C90.6274 33.2031 91.2119 32.6002 91.2119 31.7587ZM91.4373 36.4847C91.4373 35.6434 90.8336 34.9375 89.6788 34.9375H86.368V38.0506H89.6788C90.7807 38.0506 91.4564 37.4617 91.4564 36.4847H91.4373Z"/><path d="M105.092 38.2003L106.209 36.6857C107.149 37.6738 108.468 38.2347 109.85 38.233C111.503 38.233 112.16 37.443 112.16 36.7044C112.16 34.3671 105.452 35.8115 105.452 31.6746C105.452 29.8048 107.124 28.4024 109.644 28.4024C111.238 28.3418 112.791 28.9057 113.956 29.9683L112.802 31.4315C111.911 30.5913 110.715 30.1305 109.476 30.1506C108.283 30.1506 107.526 30.7069 107.526 31.5531C107.526 33.6379 114.234 32.343 114.234 36.5314C114.234 38.4013 112.893 39.9999 109.788 39.9999C107.641 39.9858 106.108 39.2613 105.092 38.2003Z"/><path d="M73.7285 1.03348e-06C67.7508 -0.00255141 62.9028 4.72314 62.9002 10.5552C62.8976 16.3872 67.7413 21.117 73.719 21.1196C79.6967 21.1221 84.5447 16.3964 84.5473 10.5644V10.5598C84.5445 4.73064 79.7033 0.00510592 73.7285 1.03348e-06ZM73.7285 17.0433C70.0557 17.0459 67.076 14.1431 67.0734 10.5598C67.0708 6.97647 70.046 4.0694 73.7189 4.06684C77.3917 4.06429 80.3714 6.96706 80.374 10.5504V10.5598C80.3714 14.1396 77.3976 17.0408 73.7285 17.0433Z"/><path d="M46.9643 20.6756H42.7767V0.257324H46.9643V8.42834H55.3252V0.257324H59.5127V20.6758H55.3252V12.5186H46.9643V20.6756Z"/><path d="M112.318 20.6756H108.13V0.257324H112.318V20.6756Z"/><path d="M131.885 20.6756H115.691L124.622 4.34283H115.691V0.257324H131.885L122.988 16.5901H131.885V20.6756Z"/><path d="M149.575 20.6756H135.23V0.257324H149.575V4.34283H139.417V8.42834H146.293V12.5186H139.417V16.5901H149.575V20.6756Z"/><path d="M169.991 20.6756H165.516L157.442 7.23635V20.6756H153.264V0.257324H157.744L165.813 13.7106V0.257324H170L169.991 20.6756Z"/><path d="M104.709 7.00694C104.709 2.64561 102.05 0.256836 97.6898 0.256836H87.9011V20.6751H92.0887V13.7569H95.7684L100.009 20.6751H104.642L100.33 13.3968C103.104 12.5835 104.709 10.3913 104.709 7.00694ZM92.0887 6.72649V4.3425H97.0909C98.9068 4.3425 100.445 5.24942 100.445 7.00694C100.445 8.76445 98.9165 9.67137 97.0909 9.67137H92.0887V6.72649Z"/></svg>`;
@@ -295,30 +305,36 @@ function renderHtml(info: ServiceInfo): string {
 <title>Horizen Vela</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="icon" type="image/png" href="${FAVICON_DATA_URI}" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
 <style>
   :root {
     --fg: #1a1a1a;
     --muted: #666;
     --bg: #fafafa;
     --border: #e5e5e5;
-    --accent: #0b6;
+    --accent: #009e9c;
     --up: #00c85a;
     --get: #0b6;
     --post: #b60;
+    --font-sans: "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-heading: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", "Menlo", "Consolas", monospace;
   }
   * { box-sizing: border-box; }
   /* Always reserve the scrollbar gutter so switching views never shifts the layout. */
   html { overflow-y: scroll; }
   body {
-    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     color: var(--fg);
     background: var(--bg);
     margin: 0;
     padding: 2rem 1rem;
     line-height: 1.5;
   }
-  .topbar { display: flex; align-items: center; gap: 1rem; max-width: 60rem; margin: 0 auto 2rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--border); }
-  .layout { display: flex; gap: 2.5rem; max-width: 60rem; margin: 0 auto; align-items: flex-start; }
+  .topbar { display: flex; align-items: center; gap: 1rem; max-width: 80rem; margin: 0 auto 2rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--border); }
+  .layout { display: flex; gap: 2.5rem; max-width: 80rem; margin: 0 auto; align-items: flex-start; }
   .sidebar { flex: none; width: 12rem; position: sticky; top: 2rem; }
   .brand-logo { display: block; flex: none; }
   .brand-logo svg { width: 8rem; height: auto; display: block; }
@@ -340,12 +356,12 @@ function renderHtml(info: ServiceInfo): string {
   }
   @media (prefers-reduced-motion: reduce) { .status-dot { animation: none; } }
   .view[hidden] { display: none; }
-  h1 { font-size: 1.5rem; margin: 0 0 0.25rem; }
+  h1 { font-family: var(--font-heading); font-weight: 700; font-size: 1.5rem; margin: 0 0 0.25rem; letter-spacing: -0.01em; }
   .tagline { color: var(--muted); margin: 0 0 2rem; }
-  h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 2rem 0 0.5rem; }
+  h2 { font-family: var(--font-heading); font-weight: 600; font-size: 1rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 2rem 0 0.5rem; }
   dl { display: grid; grid-template-columns: max-content 1fr; column-gap: 1rem; row-gap: 0.25rem; margin: 0; }
   dt { color: var(--muted); }
-  dd { margin: 0; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.9rem; word-break: break-all; }
+  dd { margin: 0; font-family: var(--font-mono); font-size: 0.9rem; word-break: break-all; }
   table { width: 100%; border-collapse: collapse; margin: 0.5rem 0 0; }
   td { padding: 0.5rem 0.75rem; border-top: 1px solid var(--border); vertical-align: top; }
   tr:first-child td { border-top: none; }
@@ -353,15 +369,15 @@ function renderHtml(info: ServiceInfo): string {
   .events-table th { text-align: left; padding: 0.35rem 0.75rem; color: var(--muted); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border); }
   .events-table td { padding: 0.4rem 0.75rem; }
   .events-table tr:first-child td { border-top: none; }
-  .evt-time { white-space: nowrap; color: var(--muted); font-family: ui-monospace, monospace; font-size: 0.8rem; }
-  .evt-block { white-space: nowrap; font-family: ui-monospace, monospace; font-size: 0.8rem; }
+  .evt-time { white-space: nowrap; color: var(--muted); font-family: var(--font-mono); font-size: 0.8rem; }
+  .evt-block { white-space: nowrap; font-family: var(--font-mono); font-size: 0.8rem; }
   .evt-type { font-weight: 600; color: var(--accent); }
-  .evt-req code { font-family: ui-monospace, monospace; font-size: 0.8rem; background: transparent; }
+  .evt-req code { font-family: var(--font-mono); font-size: 0.8rem; background: transparent; }
   .evt-detail { word-break: break-word; color: var(--fg); }
-  .method { font-family: ui-monospace, monospace; font-weight: 600; font-size: 0.8rem; width: 1%; white-space: nowrap; }
+  .method { font-family: var(--font-mono); font-weight: 600; font-size: 0.8rem; width: 1%; white-space: nowrap; }
   .method-get { color: var(--get); }
   .method-post { color: var(--post); }
-  .path code { font-family: ui-monospace, monospace; font-size: 0.9rem; background: transparent; padding: 0; }
+  .path code { font-family: var(--font-mono); font-size: 0.9rem; background: transparent; padding: 0; }
   .hint { color: var(--muted); font-size: 0.85rem; margin: 0 0 0.25rem; }
   .endpoints { margin-top: 0.25rem; }
   .endpoint { border-top: 1px solid var(--border); }
@@ -385,7 +401,7 @@ function renderHtml(info: ServiceInfo): string {
   .ep-detail { padding: 0 0.25rem 1rem 1.5rem; }
   .ep-detail > p { margin: 0.25rem 0 0.75rem; color: var(--fg); }
   .params { row-gap: 0.4rem; margin: 0 0 0.75rem; }
-  .params dt { font-family: ui-monospace, monospace; color: var(--fg); }
+  .params dt { font-family: var(--font-mono); color: var(--fg); }
   .params dt code { font-size: 0.85rem; }
   .params dd { font-family: inherit; font-size: 0.9rem; color: var(--muted); word-break: normal; }
   pre {
@@ -395,7 +411,7 @@ function renderHtml(info: ServiceInfo): string {
     padding: 0.75rem;
     margin: 0;
     overflow-x: auto;
-    font-family: ui-monospace, monospace;
+    font-family: var(--font-mono);
     font-size: 0.78rem;
     line-height: 1.45;
   }
@@ -433,7 +449,7 @@ function renderHtml(info: ServiceInfo): string {
       <dl>
         <dt>Version</dt><dd>${esc(info.vela.version)}</dd>
         <dt>ProcessorEndpoint</dt><dd><a href="${esc(info.vela.explorerBaseUrl)}/address/${esc(info.vela.processorEndpoint)}" target="_blank" rel="noopener noreferrer">${esc(info.vela.processorEndpoint)}</a></dd>
-        <dt>Network</dt><dd>${esc(info.vela.network)}${info.vela.chainId != null ? ` (chainId ${esc(info.vela.chainId)})` : ""}</dd>
+        <dt>Network</dt><dd>${esc(networkLabel(info.vela.chainId, info.vela.network))}${info.vela.chainId != null ? ` (chainId ${esc(info.vela.chainId)})` : ""}</dd>
         <dt>Network RPC</dt><dd>${esc(info.vela.rpcUrl)}</dd>
         <dt>SubGraph URL</dt><dd>${info.vela.subgraphUrl != null ? `<a href="${esc(info.vela.subgraphUrl)}" target="_blank" rel="noopener noreferrer">${esc(info.vela.subgraphUrl)}</a>` : "—"}</dd>
       </dl>
