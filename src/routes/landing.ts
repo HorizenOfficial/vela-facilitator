@@ -127,6 +127,7 @@ interface ServiceInfo {
     network: string | null;
     chainId: number | null;
     rpcUrl: string;
+    subgraphUrl: string | null;
     processorEndpoint: string;
     explorerBaseUrl: string | null;
     maxFeeValue: string;
@@ -163,6 +164,7 @@ export function createLandingRouter(config: Config, provider: ethers.JsonRpcProv
         network: chainId != null ? `eip155:${chainId}` : null,
         chainId,
         rpcUrl: config.rpcUrl,
+        subgraphUrl: config.subgraphUrl,
         processorEndpoint: config.contractAddress,
         explorerBaseUrl: config.explorerBaseUrl,
         maxFeeValue: config.maxFeeValue.toString(),
@@ -320,6 +322,7 @@ function renderHtml(info: ServiceInfo): string {
     <dt>ProcessorEndpoint</dt><dd><a href="${esc(info.vela.explorerBaseUrl)}/address/${esc(info.vela.processorEndpoint)}" target="_blank" rel="noopener noreferrer">${esc(info.vela.processorEndpoint)}</a></dd>
     <dt>Network</dt><dd>${esc(info.vela.network)}${info.vela.chainId != null ? ` (chainId ${esc(info.vela.chainId)})` : ""}</dd>
     <dt>Network RPC</dt><dd>${esc(info.vela.rpcUrl)}</dd>
+    <dt>SubGraph URL</dt><dd>${info.vela.subgraphUrl != null ? `<a href="${esc(info.vela.subgraphUrl)}" target="_blank" rel="noopener noreferrer">${esc(info.vela.subgraphUrl)}</a>` : "—"}</dd>
     <dt>Git repos:</dt><dd>
     Developer starter kit: <a href="https://github.com/HorizenOfficial/vela-starterkit">https://github.com/HorizenOfficial/vela-starterkit</a><br/>
     Client TypeScript library: <a href="https://github.com/HorizenOfficial/vela-common-ts">https://github.com/HorizenOfficial/vela-common-ts</a><br/>
