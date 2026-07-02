@@ -45,7 +45,7 @@ Responds based on the `Accept` header:
   "service": "vela-facilitator",
   "description": "...",
   "vela": {
-    "version": "0.2.0-snapshot1",
+    "version": "0.2.0",
     "network": "eip155:2651420",
     "chainId": 2651420,
     "rpcUrl": "https://...",
