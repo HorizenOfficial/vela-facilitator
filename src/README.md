@@ -16,6 +16,8 @@ Gasless request submission service for the Vela blockchain platform. Accepts sig
 | `PORT` | no | `3000` | HTTP server port |
 | `MAX_FEE_VALUE` | no | `50` | Maximum fee the facilitator pays per request (in base units) |
 | `VELA_NOVA_APPLICATION_ID` | no | `1` | Application ID forwarded in x402 settle calls |
+| `FACILITATOR_VELA_VERSION` | no | — | Vela version this facilitator targets; shown in the `vela` section of the landing page (`—` when unset) |
+| `FACILITATOR_EXPLORER_BASEURL` | no | — | Block explorer base URL for the Vela network; shown (as a link) in the `vela` section of the landing page (`—` when unset) |
 | `APP_EVENT_POLL_INTERVAL_MS` | no | `2000` | How often `/settle` polls for the TEE `AppEvent` after submission |
 | `APP_EVENT_POLL_TIMEOUT_MS` | no | `60000` | How long `/settle` waits before returning `tee_processing_timeout` |
 
@@ -29,7 +31,7 @@ Base URL: `http://<host>:<PORT>` (default port: `3000`)
 
 ## GET /
 
-Landing page: live runtime info (facilitator address, RPC / chainId, `ProcessorEndpoint` address, scheme config) and the full endpoint directory. Intended as a dev sanity-check ("is it up, and how is it configured?") and as a discovery endpoint for tooling.
+Landing page / Vela entrypoint: live runtime info grouped into a `vela` section (version, RPC / chainId / network, `ProcessorEndpoint` address, `maxFeeValue`) and a facilitator `Info` section (facilitator address, x402 scheme config), plus the full endpoint directory. Intended as a dev sanity-check ("is it up, and how is it configured?") and as a discovery endpoint for tooling.
 
 **Request**: no body
 
@@ -42,10 +44,17 @@ Responds based on the `Accept` header:
 {
   "service": "vela-facilitator",
   "description": "...",
+  "vela": {
+    "version": "0.2.0",
+    "network": "eip155:2651420",
+    "chainId": 2651420,
+    "rpcUrl": "https://...",
+    "processorEndpoint": "0x...",
+    "explorerBaseUrl": "https://explorer...",
+    "maxFeeValue": "0"
+  },
   "facilitator": { "address": "0x..." },
-  "chain": { "rpcUrl": "https://...", "chainId": 2651420, "network": "eip155:2651420" },
-  "contract": { "processorEndpoint": "0x..." },
-  "scheme": { "name": "private-vela-fixed", "applicationId": "1", "maxFeeValue": "0" },
+  "scheme": { "name": "private-vela-fixed", "applicationId": "1" },
   "endpoints": [
     { "method": "GET",  "path": "/",          "summary": "..." },
     { "method": "GET",  "path": "/supported", "summary": "..." },
