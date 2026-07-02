@@ -1,2 +1,8 @@
 packages:
   - "packages/*"
+
+# Custom pnpm (supply-chain policy) requires explicit per-package build approval.
+allowBuilds:
+  esbuild: true
+  keccak: true
+  secp256k1: true

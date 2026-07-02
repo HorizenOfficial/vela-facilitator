@@ -1,6 +1,14 @@
+import { existsSync } from "node:fs";
 import { ethers } from "ethers";
 import { loadConfig } from "./config.js";
 import { createApp } from "./app.js";
+
+// Load a local .env file if present (convenient for `pnpm dev`). Variables already
+// set in the environment take precedence, so deployments that inject env vars
+// directly are unaffected; in production no .env file exists, so this is a no-op.
+if (existsSync(".env")) {
+  process.loadEnvFile(".env");
+}
 
 async function main() {
   const config = loadConfig();

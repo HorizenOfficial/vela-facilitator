@@ -38,11 +38,11 @@ describe("GET /", () => {
     expect(body.facilitator?.address?.toLowerCase()).toBe(
       fixtures.facilitatorAccount.address.toLowerCase(),
     );
-    expect(body.contract?.processorEndpoint?.toLowerCase()).toBe(
+    expect(body.vela?.processorEndpoint?.toLowerCase()).toBe(
       fixtures.contracts.processorEndpoint.address.toLowerCase(),
     );
-    expect(body.chain?.chainId).toBe(fixtures.chainId);
-    expect(body.chain?.network).toBe(`eip155:${fixtures.chainId}`);
+    expect(body.vela?.chainId).toBe(fixtures.chainId);
+    expect(body.vela?.network).toBe(`eip155:${fixtures.chainId}`);
     expect(Array.isArray(body.endpoints)).toBe(true);
     expect(body.endpoints.length).toBeGreaterThanOrEqual(5);
   });
